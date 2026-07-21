@@ -1,0 +1,2246 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VidForge - High-Fidelity Java CLI & Desktop Suite</title>
+    <meta
+      name="description"
+      content="A premium, enterprise-grade, Java-powered YouTube downloader leveraging yt-dlp, smart cookie extraction, metadata embedding, and parallel pipelines."
+    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <link rel="stylesheet" href="/style.css" />
+
+    <script>
+      (function () {
+        const originalLog = console.log;
+        const originalWarn = console.warn;
+        const originalError = console.error;
+
+        function shouldFilter(args) {
+          try {
+            const str = Array.from(args).map(String).join(" ");
+            if (
+              str.includes("enable copy content") ||
+              str.includes("[BHK]") ||
+              str.includes("merchantId")
+            ) {
+              return true;
+            }
+          } catch (e) {}
+          return false;
+        }
+
+        console.log = function () {
+          if (!shouldFilter(arguments)) originalLog.apply(console, arguments);
+        };
+        console.warn = function () {
+          if (!shouldFilter(arguments)) originalWarn.apply(console, arguments);
+        };
+        console.error = function () {
+          if (!shouldFilter(arguments)) originalError.apply(console, arguments);
+        };
+      })();
+    </script>
+
+    <script>
+      document.documentElement.classList.add("loading-active");
+    </script>
+    <style id="vidforge-loader-critical-css">
+      html.loading-active {
+        overflow: hidden !important;
+      }
+      html.loading-active body > *:not(#vidforge-loader) {
+        opacity: 0 !important;
+        pointer-events: none !important;
+        visibility: hidden !important;
+      }
+      html.loading-active body {
+        background-color: #050505 !important;
+        overflow: hidden !important;
+      }
+
+      .vidforge-loader {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100vh;
+        background-color: #050505;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999999;
+        font-family:
+          "Inter",
+          system-ui,
+          -apple-system,
+          sans-serif;
+        overflow: hidden;
+        transition:
+          opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+          transform 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+          filter 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      .loader-bg-glow {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 600px;
+        height: 600px;
+        background: radial-gradient(
+          circle,
+          rgba(220, 38, 38, 0.15) 0%,
+          rgba(220, 38, 38, 0.03) 50%,
+          transparent 100%
+        );
+        border-radius: 50%;
+        filter: blur(80px);
+        pointer-events: none;
+        z-index: 1;
+        animation: loaderGlowPulse 4s ease-in-out infinite alternate;
+      }
+
+      .loader-grid-pattern {
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.007) 1px, transparent 1px),
+          linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0.007) 1px,
+            transparent 1px
+          );
+        background-size: 40px 40px;
+        background-position: center center;
+        opacity: 0.85;
+        z-index: 2;
+        pointer-events: none;
+      }
+
+      .loader-noise-overlay {
+        position: absolute;
+        inset: 0;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.015'/%3E%3C/svg%3E");
+        opacity: 0.6;
+        z-index: 3;
+        pointer-events: none;
+      }
+
+      .loader-content {
+        position: relative;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        max-width: 440px;
+        width: 90%;
+        padding: 24px;
+      }
+
+      .loader-logo-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 32px;
+        animation: loaderLogoFloat 6s ease-in-out infinite;
+      }
+
+      .loader-logo-icon {
+        width: 64px;
+        height: 64px;
+        background: rgba(220, 38, 38, 0.1);
+        border: 1.5px solid rgba(220, 38, 38, 0.4);
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #dc2626;
+        box-shadow:
+          0 0 20px rgba(220, 38, 38, 0.25),
+          inset 0 0 10px rgba(220, 38, 38, 0.1);
+        animation: loaderLogoPulse 2.5s ease-in-out infinite alternate;
+      }
+
+      .loader-logo-icon svg {
+        width: 32px;
+        height: 32px;
+        fill: none;
+      }
+
+      .loader-logo-text {
+        font-family: "Outfit", sans-serif;
+        font-size: 28px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        color: #ffffff;
+        margin: 0;
+        text-shadow:
+          0 2px 10px rgba(0, 0, 0, 0.5),
+          0 0 15px rgba(220, 38, 38, 0.15);
+      }
+
+      .loader-status-container {
+        margin-bottom: 24px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        min-height: 48px;
+      }
+
+      .loader-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.9);
+        letter-spacing: -0.01em;
+      }
+
+      .loader-status-message {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.45);
+        font-family: "JetBrains Mono", monospace;
+        height: 18px;
+        transition:
+          opacity 0.3s ease,
+          transform 0.3s ease;
+      }
+
+      .loader-progress-container {
+        width: 100%;
+        max-width: 380px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .loader-progress-track {
+        width: 100%;
+        height: 6px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 100px;
+        overflow: hidden;
+        position: relative;
+        backdrop-filter: blur(4px);
+      }
+
+      .loader-progress-fill {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(
+          90deg,
+          #b91c1c 0%,
+          #dc2626 50%,
+          #f87171 100%
+        );
+        border-radius: 100px;
+        box-shadow: 0 0 12px rgba(220, 38, 38, 0.5);
+        transition: width 0.4s cubic-bezier(0.1, 0.8, 0.25, 1);
+        position: relative;
+      }
+
+      .loader-shimmer {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(255, 255, 255, 0.25),
+          transparent
+        );
+        transform: translateX(-100%);
+        animation: loaderShimmer 2s infinite;
+      }
+
+      .loader-percentage {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 13px;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.7);
+      }
+
+      @keyframes loaderGlowPulse {
+        0% {
+          transform: translate(-50%, -50%) scale(0.9);
+          opacity: 0.8;
+        }
+        100% {
+          transform: translate(-50%, -50%) scale(1.1);
+          opacity: 1;
+        }
+      }
+
+      @keyframes loaderLogoFloat {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-8px);
+        }
+      }
+
+      @keyframes loaderLogoPulse {
+        0% {
+          box-shadow:
+            0 0 15px rgba(220, 38, 38, 0.2),
+            inset 0 0 5px rgba(220, 38, 38, 0.05);
+          border-color: rgba(220, 38, 38, 0.3);
+        }
+        100% {
+          box-shadow:
+            0 0 30px rgba(220, 38, 38, 0.45),
+            inset 0 0 15px rgba(220, 38, 38, 0.2);
+          border-color: rgba(220, 38, 38, 0.6);
+        }
+      }
+
+      @keyframes loaderShimmer {
+        100% {
+          transform: translateX(100%);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .loader-bg-glow,
+        .loader-logo-container,
+        .loader-logo-icon,
+        .loader-shimmer {
+          animation: none !important;
+        }
+        .loader-progress-fill {
+          transition: width 0.1s linear !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="vidforge-loader"
+      class="vidforge-loader"
+      aria-live="polite"
+      aria-label="Loading VidForge application"
+    >
+      <div class="loader-bg-glow"></div>
+      <div class="loader-grid-pattern"></div>
+      <div class="loader-noise-overlay"></div>
+
+      <div class="loader-content">
+        <div class="loader-logo-container">
+          <div class="loader-logo-icon">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96 29 29 0 0 0 .46-5.33 29 29 0 0 0-.46-5.33z"
+              ></path>
+              <polygon
+                points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"
+                fill="currentColor"
+              ></polygon>
+            </svg>
+          </div>
+          <h1 class="loader-logo-text">VidForge</h1>
+        </div>
+
+        <div class="loader-status-container">
+          <div class="loader-title">Loading VidForge...</div>
+          <div id="loader-status-message" class="loader-status-message">
+            Initializing Application...
+          </div>
+        </div>
+
+        <div class="loader-progress-container">
+          <div class="loader-progress-track">
+            <div
+              id="loader-progress-fill"
+              class="loader-progress-fill"
+              style="width: 0%"
+            >
+              <div class="loader-shimmer"></div>
+            </div>
+          </div>
+          <div id="loader-percentage" class="loader-percentage">0%</div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        const statusMessages = [
+          "Initializing Application...",
+          "Loading Interface...",
+          "Loading Styles...",
+          "Loading Components...",
+          "Loading Scripts...",
+          "Loading Assets...",
+          "Preparing Download Engine...",
+          "Initializing UI...",
+          "Almost Ready...",
+        ];
+
+        const progressWeights = {
+          dom: 20,
+          css: 20,
+          fonts: 20,
+          js: 20,
+          lucide: 20,
+        };
+
+        const loadedStatus = {
+          dom: false,
+          css: false,
+          fonts: false,
+          js: false,
+          lucide: false,
+        };
+
+        let currentProgress = 0;
+        let targetProgress = 0;
+        const startTime = Date.now();
+        const minDisplayTime = 1800;
+
+        let currentMessageIndex = 0;
+        const statusEl = document.getElementById("loader-status-message");
+
+        function rotateStatusMessage() {
+          if (statusEl) {
+            statusEl.style.opacity = "0";
+            statusEl.style.transform = "translateY(4px)";
+            setTimeout(function () {
+              currentMessageIndex =
+                (currentMessageIndex + 1) % statusMessages.length;
+              if (statusEl) {
+                statusEl.textContent = statusMessages[currentMessageIndex];
+                statusEl.style.opacity = "1";
+                statusEl.style.transform = "translateY(0)";
+              }
+            }, 300);
+          }
+        }
+        const messageInterval = setInterval(rotateStatusMessage, 1500);
+
+        window.markAssetLoaded = function (asset) {
+          if (loadedStatus[asset]) return;
+          loadedStatus[asset] = true;
+
+          let newTarget = 0;
+          for (const key in progressWeights) {
+            if (loadedStatus[key]) {
+              newTarget += progressWeights[key];
+            }
+          }
+          targetProgress = newTarget;
+          animateProgressBar();
+        };
+
+        let isAnimating = false;
+        function animateProgressBar() {
+          if (isAnimating) return;
+          isAnimating = true;
+
+          function step() {
+            if (currentProgress < targetProgress) {
+              currentProgress += 1.5;
+              if (currentProgress > targetProgress) {
+                currentProgress = targetProgress;
+              }
+
+              const fillEl = document.getElementById("loader-progress-fill");
+              const percentEl = document.getElementById("loader-percentage");
+              const progressPercent = Math.min(
+                100,
+                Math.floor(currentProgress),
+              );
+
+              if (fillEl) fillEl.style.width = progressPercent + "%";
+              if (percentEl) percentEl.textContent = progressPercent + "%";
+
+              if (currentProgress < 100) {
+                requestAnimationFrame(step);
+              } else {
+                isAnimating = false;
+                triggerCompletion();
+              }
+            } else {
+              isAnimating = false;
+            }
+          }
+          requestAnimationFrame(step);
+        }
+
+        let completionTriggered = false;
+        function triggerCompletion() {
+          if (completionTriggered) return;
+          if (currentProgress < 100) return;
+
+          completionTriggered = true;
+          clearInterval(messageInterval);
+
+          const elapsed = Date.now() - startTime;
+          const delay = Math.max(0, minDisplayTime - elapsed);
+
+          setTimeout(function () {
+            const statusMsg = document.getElementById("loader-status-message");
+            if (statusMsg) {
+              statusMsg.textContent = "Ready!";
+            }
+
+            setTimeout(function () {
+              const loader = document.getElementById("vidforge-loader");
+              if (loader) {
+                loader.style.opacity = "0";
+                loader.style.transform = "translateY(-20px) scale(1.02)";
+                loader.style.filter = "blur(10px)";
+              }
+
+              document.documentElement.classList.remove("loading-active");
+
+              setTimeout(function () {
+                if (loader) {
+                  loader.remove();
+                }
+              }, 800);
+            }, 300);
+          }, delay);
+        }
+
+        if (
+          document.readyState === "interactive" ||
+          document.readyState === "complete"
+        ) {
+          window.markAssetLoaded("dom");
+        } else {
+          document.addEventListener("DOMContentLoaded", function () {
+            window.markAssetLoaded("dom");
+          });
+        }
+
+        const cssLink = document.querySelector('link[href*="style.css"]');
+        if (cssLink) {
+          if (cssLink.sheet) {
+            window.markAssetLoaded("css");
+          } else {
+            cssLink.addEventListener("load", function () {
+              window.markAssetLoaded("css");
+            });
+            cssLink.addEventListener("error", function () {
+              window.markAssetLoaded("css");
+            });
+          }
+        } else {
+          window.markAssetLoaded("css");
+        }
+
+        if (document.fonts) {
+          document.fonts.ready
+            .then(function () {
+              window.markAssetLoaded("fonts");
+            })
+            .catch(function () {
+              window.markAssetLoaded("fonts");
+            });
+        } else {
+          window.markAssetLoaded("fonts");
+        }
+
+        function checkLucide() {
+          if (window.lucide) {
+            window.markAssetLoaded("lucide");
+          } else {
+            setTimeout(checkLucide, 50);
+          }
+        }
+        checkLucide();
+
+        window.markMainScriptLoaded = function () {
+          window.markAssetLoaded("js");
+        };
+
+        setTimeout(function () {
+          targetProgress = 100;
+          currentProgress = 100;
+          const fillEl = document.getElementById("loader-progress-fill");
+          const percentEl = document.getElementById("loader-percentage");
+          if (fillEl) fillEl.style.width = "100%";
+          if (percentEl) percentEl.textContent = "100%";
+          triggerCompletion();
+        }, 3500);
+      })();
+    </script>
+
+    <div class="bg-grid-overlay" aria-hidden="true"></div>
+    <div class="aurora-blob blob-1" aria-hidden="true"></div>
+    <div class="aurora-blob blob-2" aria-hidden="true"></div>
+    <div class="aurora-blob blob-3" aria-hidden="true"></div>
+
+    <nav class="navbar" id="mainNavbar">
+      <div
+        id="scrollProgressBar"
+        class="scroll-progress-bar"
+        aria-hidden="true"
+      ></div>
+      <div class="navbar-container">
+        <a
+          href="#home"
+          class="nav-logo"
+          aria-label="Production YouTube Downloader Home"
+        >
+          <div class="logo-icon-wrapper">
+            <svg
+              class="logo-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96 29 29 0 0 0 .46-5.33 29 29 0 0 0-.46-5.33z"
+              ></path>
+              <polygon
+                points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"
+                fill="currentColor"
+              ></polygon>
+            </svg>
+          </div>
+          <div class="logo-text">
+            <span class="logo-title">VidForge</span>
+          </div>
+        </a>
+
+        <ul class="nav-menu" id="navMenu" role="menubar">
+          <div class="nav-indicator" id="navIndicator" aria-hidden="true"></div>
+          <li role="none">
+            <a
+              href="#home"
+              class="nav-link active"
+              role="menuitem"
+              aria-label="Home"
+              tabindex="0"
+            >
+              <i data-lucide="house"></i>
+            </a>
+          </li>
+          <li role="none">
+            <a
+              href="#preview"
+              class="nav-link"
+              role="menuitem"
+              aria-label="Interactive Simulator"
+              tabindex="0"
+            >
+              <i data-lucide="play-circle"></i>
+            </a>
+          </li>
+          <li role="none">
+            <a
+              href="#architecture"
+              class="nav-link"
+              role="menuitem"
+              aria-label="Architecture"
+              tabindex="0"
+            >
+              <i data-lucide="cpu"></i>
+            </a>
+          </li>
+          <li role="none">
+            <a
+              href="#download"
+              class="nav-link"
+              role="menuitem"
+              aria-label="Download"
+              tabindex="0"
+            >
+              <i data-lucide="download"></i>
+            </a>
+          </li>
+        </ul>
+
+        <div class="nav-actions">
+          <button
+            id="themeToggleBtn"
+            class="theme-toggle-btn"
+            aria-label="Toggle light and dark mode"
+          >
+            <svg
+              class="sun-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="4"></circle>
+              <path d="M12 2v2"></path>
+              <path d="M12 20v2"></path>
+              <path d="M4.93 4.93l1.41 1.41"></path>
+              <path d="M17.66 17.66l1.41 1.41"></path>
+              <path d="M2 12h2"></path>
+              <path d="M20 12h2"></path>
+              <path d="M6.34 17.66l-1.41 1.41"></path>
+              <path d="M19.07 4.93l-1.41 1.41"></path>
+            </svg>
+            <svg
+              class="moon-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+            </svg>
+          </button>
+
+          <a
+            href="https://github.com/ravitejeshnagasarapu"
+            target="_blank"
+            class="btn btn-secondary btn-icon-only hide-mobile"
+            aria-label="GitHub Repository"
+          >
+            <svg
+              class="lucide-icon github-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              style="
+                width: 20px;
+                height: 20px;
+                display: inline-block;
+                vertical-align: middle;
+              "
+            >
+              <path
+                d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"
+              ></path>
+              <path d="M9 18c-4.51 2-5-2-7-2"></path>
+            </svg>
+          </a>
+        </div>
+
+        <button
+          id="hamburgerBtn"
+          class="hamburger-menu"
+          aria-label="Toggle Navigation Menu"
+          aria-expanded="false"
+        >
+          <span class="bar"></span>
+          <span class="bar"></span>
+          <span class="bar"></span>
+        </button>
+      </div>
+    </nav>
+
+    <div class="mobile-drawer" id="mobileDrawer">
+      <ul class="mobile-nav-list">
+        <li>
+          <a href="#home" class="mobile-nav-link">
+            <i data-lucide="house"></i>
+            <span>Home</span>
+          </a>
+        </li>
+        <li>
+          <a href="#preview" class="mobile-nav-link">
+            <i data-lucide="play-circle"></i>
+            <span>Interactive Simulator</span>
+          </a>
+        </li>
+        <li>
+          <a href="#architecture" class="mobile-nav-link">
+            <i data-lucide="cpu"></i>
+            <span>Architecture</span>
+          </a>
+        </li>
+        <li>
+          <a href="#download" class="mobile-nav-link">
+            <i data-lucide="download"></i>
+            <span>Download</span>
+          </a>
+        </li>
+      </ul>
+      <div class="mobile-drawer-footer">
+        <a
+          href="https://github.com/ravitejeshnagasarapu"
+          target="_blank"
+          class="btn btn-secondary w-full"
+          style="justify-content: center; margin-bottom: 10px"
+        >
+          <svg
+            class="lucide-icon github-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            style="
+              width: 20px;
+              height: 20px;
+              display: inline-block;
+              vertical-align: middle;
+              margin-right: 8px;
+            "
+          >
+            <path
+              d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"
+            ></path>
+            <path d="M9 18c-4.51 2-5-2-7-2"></path>
+          </svg>
+          <span>GitHub Code</span>
+        </a>
+        <a
+          href="#download"
+          class="btn btn-primary w-full"
+          style="justify-content: center"
+        >
+          <i data-lucide="download"></i> <span>Download Now</span>
+        </a>
+      </div>
+    </div>
+
+    <header class="hero-section" id="home">
+      <div class="container hero-container">
+        <h1 class="hero-title animate-fade-up">
+          Welcome to <span class="gradient-text">VidForge</span>
+        </h1>
+
+        <p class="hero-subtitle animate-fade-up">
+          A fast, modern, and reliable YouTube downloader designed to make
+          downloading videos and audio effortless. Simply paste your link,
+          choose your preferred format, and let VidForge handle the rest with a
+          smooth and intuitive experience.
+        </p>
+
+        <div class="hero-ctas animate-fade-up">
+          <a href="#download" class="btn btn-primary btn-lg magnetic">
+            <i data-lucide="download-cloud"></i>
+            <span>Download Now</span>
+          </a>
+          <a
+            href="https://github.com/ravitejeshnagasarapu"
+            class="btn btn-secondary btn-lg magnetic"
+            target="_blank"
+          >
+            <svg
+              class="lucide-icon github-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              style="
+                width: 20px;
+                height: 20px;
+                display: inline-block;
+                vertical-align: middle;
+                margin-right: 8px;
+              "
+            >
+              <path
+                d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"
+              ></path>
+              <path d="M9 18c-4.51 2-5-2-7-2"></path>
+            </svg>
+            <span>View Source on GitHub</span>
+          </a>
+          <a href="#preview" class="btn btn-glass btn-lg magnetic">
+            <span class="demo-dot"></span>
+            <span>Try Simulator Demo</span>
+          </a>
+        </div>
+
+        <div class="laptop-mockup-wrapper animate-fade-up" id="preview">
+          <div class="laptop-screen-bezel">
+            <div class="laptop-camera"></div>
+            <div class="laptop-screen-content">
+              <div class="app-window" id="interactiveAppWindow">
+                <aside class="app-sidebar">
+                  <div class="app-logo">
+                    <div class="logo-dot"></div>
+                    <span class="app-title">VidForge</span>
+                  </div>
+                  <nav class="app-sidebar-nav">
+                    <button
+                      class="sidebar-item active"
+                      data-tab="tab-dashboard"
+                    >
+                      <i data-lucide="layout-dashboard"></i>
+                      <span>Dashboard</span>
+                    </button>
+                    <button class="sidebar-item" data-tab="tab-queue">
+                      <i data-lucide="list-video"></i>
+                      <span>Download Queue</span>
+                      <span class="sidebar-badge" id="sidebarQueueCount"
+                        >0</span
+                      >
+                    </button>
+                    <button class="sidebar-item" data-tab="tab-history">
+                      <i data-lucide="history"></i>
+                      <span>Downloads History</span>
+                    </button>
+                  </nav>
+                  <div class="app-sidebar-footer"></div>
+                </aside>
+
+                <main class="app-content-container">
+                  <header class="app-header-bar">
+                    <div class="app-header-search">
+                      <i data-lucide="search" class="search-icon"></i>
+                      <input
+                        type="text"
+                        placeholder="Search logs, history, or configurations..."
+                        class="header-search-input"
+                      />
+                    </div>
+                    <div class="app-header-controls"></div>
+                  </header>
+
+                  <section class="app-tab-panel active" id="tab-dashboard">
+                    <div class="panel-heading">
+                      <h2 class="panel-title">Smart URL Ingestion</h2>
+                      <p class="panel-subtitle">
+                        Paste any YouTube Video, Playlist, or Channel URL below
+                        to simulate an enterprise-grade download pipeline.
+                      </p>
+                    </div>
+
+                    <div class="url-ingestion-card">
+                      <div class="url-input-group">
+                        <div class="input-icon-wrapper">
+                          <i data-lucide="link-2"></i>
+                        </div>
+                        <input
+                          type="url"
+                          id="simulationUrlInput"
+                          class="app-url-input"
+                          placeholder="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+                          value="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+                        />
+                        <button
+                          id="detectClipboardBtn"
+                          class="btn-clipboard-detect"
+                          title="Paste from clipboard"
+                        >
+                          <i data-lucide="clipboard"></i>
+                        </button>
+                      </div>
+
+                      <div class="download-configuration-grid">
+                        <div class="config-select-group">
+                          <label for="simDownloadMode">Download Mode</label>
+                          <select id="simDownloadMode" class="app-select">
+                            <option value="bestvideo">
+                              Best Available Video (Merge MP4 + M4A)
+                            </option>
+                            <option value="1080p">
+                              High Definition 1080p (MP4)
+                            </option>
+                            <option value="4k">
+                              Ultra HD 2160p (4K - VP9/AV1)
+                            </option>
+                            <option value="mp3">
+                              Extract Audio: High Quality MP3 (320kbps)
+                            </option>
+                            <option value="flac">
+                              Extract Audio: Lossless FLAC
+                            </option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div class="action-row">
+                        <button
+                          id="startSimBtn"
+                          class="btn btn-primary btn-run-download-sim"
+                        >
+                          <i data-lucide="play"></i>
+                          <span>Start High-Fidelity Simulator Download</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="sim-process-panel hidden" id="simProcessPanel">
+                      <div class="sim-metadata-row">
+                        <div
+                          class="video-thumbnail-placeholder"
+                          id="simVideoThumbnail"
+                        >
+                          <div class="thumb-fallback-icon">
+                            <i data-lucide="video"></i>
+                          </div>
+                        </div>
+                        <div class="video-details">
+                          <h4 class="video-title" id="simVideoTitle">
+                            Fetching media information...
+                          </h4>
+                          <p class="video-channel" id="simVideoChannel">--</p>
+                          <div class="video-meta-badges">
+                            <span class="meta-badge" id="simVideoDuration"
+                              >Duration: --</span
+                            >
+                            <span class="meta-badge" id="simVideoViewCount"
+                              >Views: --</span
+                            >
+                            <span class="meta-badge" id="simVideoFormat"
+                              >Format: Best</span
+                            >
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="comprehensive-progress-card">
+                        <div class="progress-header-row">
+                          <span
+                            class="progress-stage-label"
+                            id="progressStageLabel"
+                            >Initializing pipeline...</span
+                          >
+                          <span
+                            class="progress-percentage-label"
+                            id="progressPercentLabel"
+                            >0%</span
+                          >
+                        </div>
+
+                        <div class="progress-track">
+                          <div class="progress-fill" id="simProgressFill"></div>
+                        </div>
+
+                        <div class="progress-stats-row">
+                          <div class="p-stat">
+                            <span class="p-stat-val" id="simProgressSpeed"
+                              >0.0 MB/s</span
+                            >
+                            <span class="p-stat-lbl">Speed</span>
+                          </div>
+                          <div class="p-stat">
+                            <span class="p-stat-val" id="simProgressETA"
+                              >--:--</span
+                            >
+                            <span class="p-stat-lbl">ETA</span>
+                          </div>
+                          <div class="p-stat">
+                            <span class="p-stat-val" id="simProgressSize"
+                              >-- MB</span
+                            >
+                            <span class="p-stat-lbl">File Size</span>
+                          </div>
+                          <div class="p-stat">
+                            <span
+                              class="p-stat-val text-success"
+                              id="simProgressResolution"
+                              >1080p</span
+                            >
+                            <span class="p-stat-lbl">Active Codec</span>
+                          </div>
+                        </div>
+
+                        <div class="log-ticker-console">
+                          <div class="ticker-dot animate-pulse"></div>
+                          <span class="ticker-text" id="simTickerText"
+                            >Preparing yt-dlp execution environment...</span
+                          >
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="app-tab-panel" id="tab-queue">
+                    <div class="panel-heading">
+                      <h2 class="panel-title">Active Queue Management</h2>
+                      <p class="panel-subtitle">
+                        Multi-threaded asynchronous download scheduler. Parallel
+                        pipelines download media clips concurrently.
+                      </p>
+                    </div>
+                    <div class="queue-list-wrapper">
+                      <table class="app-table">
+                        <thead>
+                          <tr>
+                            <th>Media Title</th>
+                            <th>Codec / Mode</th>
+                            <th>Status</th>
+                            <th>Size</th>
+                            <th>Progress</th>
+                          </tr>
+                        </thead>
+                        <tbody id="simQueueTableBody">
+                          <tr class="empty-row">
+                            <td colspan="5">
+                              <div class="empty-state-cell">
+                                <i data-lucide="list-video"></i>
+                                <p>
+                                  No active downloads in queue. Add URLs in the
+                                  Dashboard tab.
+                                </p>
+                              </div>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+
+                  <section class="app-tab-panel" id="tab-history">
+                    <div class="panel-heading">
+                      <div class="heading-row-split">
+                        <div>
+                          <h2 class="panel-title">
+                            Download History (SQLite backed)
+                          </h2>
+                          <p class="panel-subtitle">
+                            Persisted logs tracking downloaded items, saved
+                            folders, sizes, and timestamps.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="history-controls-row">
+                      <div class="search-input-wrapper">
+                        <i data-lucide="search"></i>
+                        <input
+                          type="text"
+                          id="historySearch"
+                          placeholder="Search history..."
+                          class="history-filter-input"
+                        />
+                      </div>
+                      <div class="filter-dropdown-wrapper">
+                        <select id="historyFilterFormat" class="app-select-sm">
+                          <option value="all">All Formats</option>
+                          <option value="mp4">MP4 Video</option>
+                          <option value="mp3">MP3 Audio</option>
+                          <option value="mkv">MKV High-Quality</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div
+                      id="historyBulkActionsBar"
+                      class="bulk-actions-bar hidden"
+                    >
+                      <div class="bulk-info">
+                        <span
+                          class="selected-count-badge"
+                          id="historySelectedCountBadge"
+                          >0</span
+                        >
+                        <span id="historySelectedCountText"
+                          >items selected</span
+                        >
+                      </div>
+                      <div class="bulk-actions-buttons">
+                        <button
+                          class="btn btn-secondary btn-sm"
+                          id="btnBulkReDownload"
+                          title="Re-download selected items"
+                        >
+                          <i data-lucide="refresh-cw"></i>
+                          <span>Re-download Selected</span>
+                        </button>
+                        <button
+                          class="btn btn-danger btn-sm"
+                          id="btnBulkDelete"
+                          title="Delete selected items"
+                        >
+                          <i data-lucide="trash-2"></i>
+                          <span>Delete Selected</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="queue-list-wrapper">
+                      <table class="app-table">
+                        <thead>
+                          <tr>
+                            <th
+                              style="
+                                width: 46px;
+                                text-align: center;
+                                vertical-align: middle;
+                              "
+                            >
+                              <label class="custom-checkbox-container">
+                                <input type="checkbox" id="historySelectAll" />
+                                <span class="custom-checkbox-mark"></span>
+                              </label>
+                            </th>
+                            <th>Downloaded Title</th>
+                            <th>Format</th>
+                            <th>Size</th>
+                            <th>Date Saved</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody id="simHistoryTableBody">
+                          <tr class="empty-row hidden" id="historyEmptyRow">
+                            <td colspan="6">
+                              <div class="empty-state-cell">
+                                <i data-lucide="history"></i>
+                                <p>
+                                  No downloads in history. Ingest URLs in the
+                                  Dashboard tab to populate!
+                                </p>
+                              </div>
+                            </td>
+                          </tr>
+                          <tr>
+                            <td
+                              style="text-align: center; vertical-align: middle"
+                            >
+                              <label class="custom-checkbox-container">
+                                <input
+                                  type="checkbox"
+                                  class="history-item-checkbox"
+                                />
+                                <span class="custom-checkbox-mark"></span>
+                              </label>
+                            </td>
+                            <td>
+                              <span class="video-title-bold"
+                                >Lofi Girl - Synthwave Radio (Beats to
+                                Chill/Study to)</span
+                              >
+                            </td>
+                            <td>
+                              <span class="badge badge-success"
+                                >Audio (MP3)</span
+                              >
+                            </td>
+                            <td>114.2 MB</td>
+                            <td>2026-07-19 14:24</td>
+                            <td>
+                              <div class="action-btn-cell">
+                                <button
+                                  class="btn-table-action"
+                                  title="Open Folder"
+                                >
+                                  <i data-lucide="folder-open"></i>
+                                </button>
+                                <button
+                                  class="btn-table-action"
+                                  title="Re-download"
+                                >
+                                  <i data-lucide="refresh-cw"></i>
+                                </button>
+                                <button
+                                  class="btn-table-action btn-delete-row"
+                                  title="Delete"
+                                >
+                                  <i data-lucide="trash-2"></i>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                          <tr>
+                            <td
+                              style="text-align: center; vertical-align: middle"
+                            >
+                              <label class="custom-checkbox-container">
+                                <input
+                                  type="checkbox"
+                                  class="history-item-checkbox"
+                                />
+                                <span class="custom-checkbox-mark"></span>
+                              </label>
+                            </td>
+                            <td>
+                              <span class="video-title-bold"
+                                >Framer Motion Advanced Animation Tutorial
+                                2026</span
+                              >
+                            </td>
+                            <td>
+                              <span class="badge badge-primary"
+                                >Video (1080p)</span
+                              >
+                            </td>
+                            <td>342.8 MB</td>
+                            <td>2026-07-18 09:12</td>
+                            <td>
+                              <div class="action-btn-cell">
+                                <button
+                                  class="btn-table-action"
+                                  title="Open Folder"
+                                >
+                                  <i data-lucide="folder-open"></i>
+                                </button>
+                                <button
+                                  class="btn-table-action"
+                                  title="Re-download"
+                                >
+                                  <i data-lucide="refresh-cw"></i>
+                                </button>
+                                <button
+                                  class="btn-table-action btn-delete-row"
+                                  title="Delete"
+                                >
+                                  <i data-lucide="trash-2"></i>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                          <tr>
+                            <td
+                              style="text-align: center; vertical-align: middle"
+                            >
+                              <label class="custom-checkbox-container">
+                                <input
+                                  type="checkbox"
+                                  class="history-item-checkbox"
+                                />
+                                <span class="custom-checkbox-mark"></span>
+                              </label>
+                            </td>
+                            <td>
+                              <span class="video-title-bold"
+                                >Rick Astley - Never Gonna Give You Up (Official
+                                Video)</span
+                              >
+                            </td>
+                            <td>
+                              <span class="badge badge-primary"
+                                >Video (4K)</span
+                              >
+                            </td>
+                            <td>89.4 MB</td>
+                            <td>2026-07-15 22:45</td>
+                            <td>
+                              <div class="action-btn-cell">
+                                <button
+                                  class="btn-table-action"
+                                  title="Open Folder"
+                                >
+                                  <i data-lucide="folder-open"></i>
+                                </button>
+                                <button
+                                  class="btn-table-action"
+                                  title="Re-download"
+                                >
+                                  <i data-lucide="refresh-cw"></i>
+                                </button>
+                                <button
+                                  class="btn-table-action btn-delete-row"
+                                  title="Delete"
+                                >
+                                  <i data-lucide="trash-2"></i>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                </main>
+              </div>
+            </div>
+          </div>
+          <div class="laptop-keyboard-bezel">
+            <div class="laptop-keyboard-groove"></div>
+            <div class="laptop-trackpad"></div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <section class="about-section" id="architecture">
+      <div class="container">
+        <div class="section-header text-center">
+          <h2 class="section-title">The Engineering Inside</h2>
+          <p class="section-subtitle">
+            How a production-grade engine bypasses typical download roadblocks
+            like bot detections, speed caps, and format restrictions.
+          </p>
+        </div>
+
+        <div class="about-grid">
+          <div class="about-desc-col">
+            <h3 class="about-headline">
+              Built Atop Robust Java Download Engines
+            </h3>
+            <p class="about-para">
+              Traditional tools often break because YouTube frequently updates
+              its web players. The
+              <span class="code-highlight">VidForge</span> architecture is built
+              entirely to insulate users from these breakages. Powered by an
+              actively maintained
+              <span class="code-highlight">yt-dlp</span> base library with Java
+              orchestrations, it programmatically handles format resolution,
+              cookies decryption, and stream merging.
+            </p>
+
+            <div class="about-points">
+              <div class="point-item">
+                <div class="point-icon"><i data-lucide="shield-check"></i></div>
+                <div class="point-text">
+                  <strong>Automatic Browser Cookies Fallback:</strong> If
+                  YouTube triggers a bot detection wall, the application
+                  automatically scans your browser's secure sqlite vaults
+                  (Chrome → Edge → Firefox → Brave → Opera) to extract active
+                  cookies, bypassing captcha walls seamlessly.
+                </div>
+              </div>
+              <div class="point-item">
+                <div class="point-icon"><i data-lucide="refresh-cw"></i></div>
+                <div class="point-text">
+                  <strong>Exponential Backoff Retries:</strong> Network drops
+                  won't corrupt your files. Built-in resume modules request
+                  byte-ranges, resuming downloads exactly where they stalled
+                  with exponential retries.
+                </div>
+              </div>
+              <div class="point-item">
+                <div class="point-icon"><i data-lucide="merge"></i></div>
+                <div class="point-text">
+                  <strong>Smart Stream Merging:</strong> YouTube stores
+                  high-definition video (1080p, 4K) separately from high-quality
+                  audio track files. The tool downloads both in parallel and
+                  weaves them together instantly using auto-detected FFmpeg
+                  pipelines.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="about-diag-col">
+            <div class="diag-container">
+              <h4 class="diag-title">Backend Architecture & Data Flow</h4>
+
+              <div
+                class="diag-tabs"
+                style="
+                  display: flex;
+                  gap: 8px;
+                  margin-bottom: 24px;
+                  border-bottom: 1px solid var(--border);
+                  padding-bottom: 12px;
+                "
+              >
+                <button
+                  class="diag-tab-btn active"
+                  data-tab="flow"
+                  style="
+                    background: rgba(var(--primary-rgb), 0.1);
+                    border: 1px solid var(--border);
+                    color: var(--text-primary);
+                    font-family: var(--font-sans);
+                    font-size: 11px;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.05em;
+                    padding: 6px 12px;
+                    cursor: pointer;
+                    border-radius: 4px;
+                    transition: all 0.2s;
+                  "
+                >
+                  System Data Flow
+                </button>
+                <button
+                  class="diag-tab-btn"
+                  data-tab="classes"
+                  style="
+                    background: none;
+                    border: 1px solid transparent;
+                    color: var(--text-muted);
+                    font-family: var(--font-sans);
+                    font-size: 11px;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.05em;
+                    padding: 6px 12px;
+                    cursor: pointer;
+                    border-radius: 4px;
+                    transition: all 0.2s;
+                  "
+                >
+                  Class Relationships
+                </button>
+              </div>
+
+              <div class="diag-tree" id="flowDiagTree">
+                <div class="diag-node parent">
+                  <div class="node-badge">Application Start</div>
+                  <div class="node-box">
+                    <i data-lucide="shield-check"></i>
+                    <span>Dependency Validation (yt-dlp, FFmpeg)</span>
+                  </div>
+                </div>
+
+                <div class="diag-arrow-down">
+                  <i data-lucide="arrow-down"></i>
+                </div>
+
+                <div class="diag-node parent">
+                  <div class="node-badge">User Ingestion</div>
+                  <div class="node-box">
+                    <i data-lucide="link"></i>
+                    <span>User Input & URL Sanitization</span>
+                  </div>
+                </div>
+
+                <div class="diag-arrow-down">
+                  <i data-lucide="arrow-down"></i>
+                </div>
+
+                <div class="diag-node parent">
+                  <div class="node-badge">Extraction Core</div>
+                  <div class="node-box accent">
+                    <i data-lucide="file-json"></i>
+                    <span>Metadata & Info Extraction</span>
+                  </div>
+                  <div class="node-child-branches">
+                    <div class="branch-card green">
+                      <i data-lucide="check-circle-2"></i>
+                      <span>Playlist & Video Check</span>
+                    </div>
+                    <div class="branch-card yellow">
+                      <i data-lucide="info"></i>
+                      <span>Title, Viewcount, Duration</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="diag-arrow-down">
+                  <i data-lucide="arrow-down"></i>
+                </div>
+
+                <div class="diag-node parent">
+                  <div class="node-badge">Download Options</div>
+                  <div class="node-box">
+                    <i data-lucide="sliders"></i>
+                    <span>Mode & Quality Selection (1-6)</span>
+                  </div>
+                </div>
+
+                <div class="diag-arrow-down">
+                  <i data-lucide="arrow-down"></i>
+                </div>
+
+                <div class="diag-node parent">
+                  <div class="node-badge">Subprocess Spawning</div>
+                  <div class="node-box double">
+                    <div class="sub-pipe">
+                      <i data-lucide="play"></i>
+                      <span>yt-dlp Execution</span>
+                    </div>
+                    <div class="pipe-divider"></div>
+                    <div class="sub-pipe">
+                      <i data-lucide="globe"></i>
+                      <span>Browser Cookie Decrypt</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="diag-arrow-down">
+                  <i data-lucide="arrow-down"></i>
+                </div>
+
+                <div class="diag-node parent">
+                  <div class="node-badge">Console Progress Handler</div>
+                  <div class="node-box success">
+                    <i data-lucide="terminal"></i>
+                    <span>Regex Parser & Progress Bar</span>
+                  </div>
+                </div>
+
+                <div class="diag-arrow-down">
+                  <i data-lucide="arrow-down"></i>
+                </div>
+
+                <div class="diag-node parent">
+                  <div class="node-badge">FFmpeg Pipeline</div>
+                  <div class="node-box success">
+                    <i data-lucide="merge"></i>
+                    <span>Merger & Subtitle Embedder</span>
+                  </div>
+                </div>
+
+                <div class="diag-arrow-down">
+                  <i data-lucide="arrow-down"></i>
+                </div>
+
+                <div class="diag-node final">
+                  <div class="node-box gold">
+                    <i data-lucide="check-circle-2"></i>
+                    <span>Completion Summary & Exit</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="diag-tree" id="classDiagTree" style="display: none">
+                <div class="diag-node parent">
+                  <div class="node-badge">Entry Orchestrator</div>
+                  <div class="node-box accent">
+                    <i data-lucide="play-circle"></i>
+                    <span>Main.java</span>
+                  </div>
+                </div>
+
+                <div class="diag-arrow-down">
+                  <i data-lucide="arrow-down"></i>
+                </div>
+
+                <div class="diag-node parent">
+                  <div class="node-badge">Execution Engine</div>
+                  <div class="node-box success">
+                    <i data-lucide="cpu"></i>
+                    <span>YouTubeDownloader</span>
+                  </div>
+
+                  <div
+                    class="node-child-branches"
+                    style="
+                      flex-wrap: wrap;
+                      max-width: 320px;
+                      gap: 8px;
+                      margin-top: 14px;
+                    "
+                  >
+                    <div
+                      class="branch-card"
+                      style="border-color: var(--border)"
+                    >
+                      <i data-lucide="settings"></i>
+                      <span>Config</span>
+                    </div>
+                    <div
+                      class="branch-card"
+                      style="border-color: var(--border)"
+                    >
+                      <i data-lucide="terminal"></i>
+                      <span>ConsoleRenderer</span>
+                    </div>
+                    <div
+                      class="branch-card"
+                      style="border-color: var(--border)"
+                    >
+                      <i data-lucide="monitor"></i>
+                      <span>TerminalCapabilities</span>
+                    </div>
+                    <div
+                      class="branch-card"
+                      style="border-color: var(--border)"
+                    >
+                      <i data-lucide="smile"></i>
+                      <span>Icons</span>
+                    </div>
+                    <div
+                      class="branch-card"
+                      style="border-color: var(--border)"
+                    >
+                      <i data-lucide="bar-chart-2"></i>
+                      <span>DownloadStatistics</span>
+                    </div>
+                    <div
+                      class="branch-card"
+                      style="border-color: var(--border)"
+                    >
+                      <i data-lucide="activity"></i>
+                      <span>ProgressParser</span>
+                    </div>
+                    <div
+                      class="branch-card"
+                      style="border-color: var(--border)"
+                    >
+                      <i data-lucide="loader-2"></i>
+                      <span>ProgressBar</span>
+                    </div>
+                    <div
+                      class="branch-card"
+                      style="border-color: var(--border)"
+                    >
+                      <i data-lucide="file-text"></i>
+                      <span>Logger</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="diag-arrow-down">
+                  <i data-lucide="arrow-down"></i>
+                </div>
+
+                <div class="diag-node final">
+                  <div class="node-badge">External Binaries</div>
+                  <div
+                    class="node-box gold"
+                    style="
+                      display: flex;
+                      gap: 12px;
+                      justify-content: center;
+                      align-items: center;
+                      width: auto;
+                    "
+                  >
+                    <span
+                      style="
+                        display: flex;
+                        align-items: center;
+                        gap: 4px;
+                        font-size: 11px;
+                      "
+                      ><i data-lucide="download"></i> yt-dlp</span
+                    >
+                    <div
+                      style="
+                        width: 1px;
+                        height: 12px;
+                        background: var(--border);
+                      "
+                    ></div>
+                    <span
+                      style="
+                        display: flex;
+                        align-items: center;
+                        gap: 4px;
+                        font-size: 11px;
+                      "
+                      ><i data-lucide="video"></i> FFmpeg</span
+                    >
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="how-it-works-section" id="how-it-works">
+      <div class="container">
+        <div class="section-header text-center">
+          <h2 class="section-title">The Downloader Lifecycle</h2>
+          <p class="section-subtitle">
+            A trace of the logical pipeline running when you execute the script
+            from start to finish.
+          </p>
+        </div>
+
+        <div class="timeline-container">
+          <div class="timeline-step">
+            <div class="step-number">01</div>
+            <div class="step-content">
+              <h4 class="step-title">Paste & Validate</h4>
+              <p class="step-desc">
+                Ingests the target URL. Verifies domain structures, runs
+                sanitizers, checks Clipboard caches, and queries SQLite files to
+                prevent duplicates.
+              </p>
+            </div>
+          </div>
+
+          <div class="timeline-connector">
+            <div class="timeline-arrow">
+              <svg
+                class="arrow-svg arrow-horizontal"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="4" y1="12" x2="20" y2="12"></line>
+                <polyline points="13 5 20 12 13 19"></polyline>
+              </svg>
+              <svg
+                class="arrow-svg arrow-vertical"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="12" y1="4" x2="12" y2="20"></line>
+                <polyline points="5 13 12 20 19 13"></polyline>
+              </svg>
+            </div>
+          </div>
+
+          <div class="timeline-step">
+            <div class="step-number">02</div>
+            <div class="step-content">
+              <h4 class="step-title">Extract Metadata</h4>
+              <p class="step-desc">
+                Launches light scraping subprocesses. Fetches description text,
+                tags, chapters, subtitle pathways, and available video quality
+                codec indices.
+              </p>
+            </div>
+          </div>
+
+          <div class="timeline-connector">
+            <div class="timeline-arrow">
+              <svg
+                class="arrow-svg arrow-horizontal"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="4" y1="12" x2="20" y2="12"></line>
+                <polyline points="13 5 20 12 13 19"></polyline>
+              </svg>
+              <svg
+                class="arrow-svg arrow-vertical"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="12" y1="4" x2="12" y2="20"></line>
+                <polyline points="5 13 12 20 19 13"></polyline>
+              </svg>
+            </div>
+          </div>
+
+          <div class="timeline-step">
+            <div class="step-number">03</div>
+            <div class="step-content">
+              <h4 class="step-title">Decide & Select</h4>
+              <p class="step-desc">
+                Evaluates your Config settings. Automatically chooses optimal
+                codecs (AV1/VP9 for video, Opus/AAC for audio) for high-fidelity
+                rendering.
+              </p>
+            </div>
+          </div>
+
+          <div class="timeline-connector">
+            <div class="timeline-arrow">
+              <svg
+                class="arrow-svg arrow-horizontal"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="4" y1="12" x2="20" y2="12"></line>
+                <polyline points="13 5 20 12 13 19"></polyline>
+              </svg>
+              <svg
+                class="arrow-svg arrow-vertical"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="12" y1="4" x2="12" y2="20"></line>
+                <polyline points="5 13 12 20 19 13"></polyline>
+              </svg>
+            </div>
+          </div>
+
+          <div class="timeline-step">
+            <div class="step-number">04</div>
+            <div class="step-content">
+              <h4 class="step-title">Parallel Download</h4>
+              <p class="step-desc">
+                Requests target media chunks. Runs dual-thread transfers,
+                automatically falling back to decrypted browser cookie
+                structures if blocked.
+              </p>
+            </div>
+          </div>
+
+          <div class="timeline-connector">
+            <div class="timeline-arrow">
+              <svg
+                class="arrow-svg arrow-horizontal"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="4" y1="12" x2="20" y2="12"></line>
+                <polyline points="13 5 20 12 13 19"></polyline>
+              </svg>
+              <svg
+                class="arrow-svg arrow-vertical"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="12" y1="4" x2="12" y2="20"></line>
+                <polyline points="5 13 12 20 19 13"></polyline>
+              </svg>
+            </div>
+          </div>
+
+          <div class="timeline-step">
+            <div class="step-number">05</div>
+            <div class="step-content">
+              <h4 class="step-title">FFmpeg Processing</h4>
+              <p class="step-desc">
+                Hooks external FFmpeg libraries. Glues decoupled files, maps
+                chapters, extracts subtitle files, and embeds covers as metadata
+                containers.
+              </p>
+            </div>
+          </div>
+
+          <div class="timeline-connector">
+            <div class="timeline-arrow">
+              <svg
+                class="arrow-svg arrow-horizontal"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="4" y1="12" x2="20" y2="12"></line>
+                <polyline points="13 5 20 12 13 19"></polyline>
+              </svg>
+              <svg
+                class="arrow-svg arrow-vertical"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="12" y1="4" x2="12" y2="20"></line>
+                <polyline points="5 13 12 20 19 13"></polyline>
+              </svg>
+            </div>
+          </div>
+
+          <div class="timeline-step">
+            <div class="step-number">06</div>
+            <div class="step-content">
+              <h4 class="step-title">Organize & Save</h4>
+              <p class="step-desc">
+                Creates designated folder categories, moves files cleanly, logs
+                success arrays in history trackers, and wipes temp chunks off
+                storage cards.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="repository-section" id="repository">
+      <div class="container">
+        <div class="section-header text-center">
+          <h2 class="section-title">Modular Structure Architecture</h2>
+          <p class="section-subtitle">
+            A glance at our production-ready workspace file layout. Tap any
+            module to inspect its core responsibility.
+          </p>
+        </div>
+
+        <div class="repo-tree-layout">
+          <div class="repo-tree-card">
+            <div class="tree-header">
+              <i data-lucide="folder-git-2" class="text-accent"></i>
+              <span class="font-mono">youtube_downloader /</span>
+            </div>
+            <div class="tree-body" id="repoFileTree">
+              <div class="tree-item file active" data-file="Main.java">
+                <i data-lucide="file-code" class="file-icon py-color"></i>
+                <span class="font-mono">Main.java</span>
+                <span class="item-tag">Application Entry</span>
+              </div>
+
+              <div class="tree-item file" data-file="Configuration">
+                <i data-lucide="code" class="file-icon py-color"></i>
+                <span class="font-mono">Config (Internal)</span>
+                <span class="item-tag">Static Settings</span>
+              </div>
+
+              <div class="tree-item file" data-file="TerminalRenderer">
+                <i data-lucide="code" class="file-icon py-color"></i>
+                <span class="font-mono">ConsoleRenderer (Internal)</span>
+                <span class="item-tag">UI Drawing</span>
+              </div>
+
+              <div class="tree-item file" data-file="ProgressParser">
+                <i data-lucide="code" class="file-icon py-color"></i>
+                <span class="font-mono">ProgressParser (Internal)</span>
+                <span class="item-tag">Asynchronous parsing</span>
+              </div>
+
+              <div class="tree-item file" data-file="DownloadStatistics">
+                <i data-lucide="code" class="file-icon py-color"></i>
+                <span class="font-mono">DownloadStatistics (Internal)</span>
+                <span class="item-tag">Ingestion stats</span>
+              </div>
+
+              <div class="tree-item file" data-file="YouTubeDownloader">
+                <i data-lucide="code" class="file-icon py-color"></i>
+                <span class="font-mono">YouTubeDownloader (Internal)</span>
+                <span class="item-tag">Core yt-dlp Wrapper</span>
+              </div>
+
+              <div class="tree-item file" data-file="Logger">
+                <i data-lucide="code" class="file-icon py-color"></i>
+                <span class="font-mono">Logger (Static)</span>
+                <span class="item-tag">Event Logging</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="repo-desc-card">
+            <div class="desc-header">
+              <i data-lucide="info" class="text-primary"></i>
+              <span id="activeFileName" class="font-mono">Main.java</span>
+            </div>
+            <div class="desc-body">
+              <h4 id="activeFileTitle">Application Entry & Interactive CLI</h4>
+              <p id="activeFileDesc" class="active-file-desc">
+                The primary entry point of the Java application. Initializes the
+                YouTubeDownloader, handles user inputs, cleans URLs, displays
+                options (1-6), and orchestrates the download process.
+              </p>
+              <div class="code-segment-wrapper">
+                <span class="code-segment-label">Module Code Blueprint:</span>
+                <pre
+                  class="code-segment-pre"
+                ><code id="activeFileImports" class="font-mono">import java.io.*;
+import java.nio.file.*;
+import java.util.*;
+import java.util.logging.*;
+
+public class Main {
+    public static void main(String[] args) {
+        ConsoleRenderer.printBanner();
+        // Option menu and downloader orchestration
+    }
+}</code></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="download-section" id="download">
+      <div class="container text-center">
+        <div class="download-box-card">
+          <div class="card-glow"></div>
+          <h2 class="download-title">Set Up Your Local Pipeline</h2>
+          <p class="download-desc">
+            Getting started with <span class="code-highlight">VidForge</span> is
+            straightforward. It requires Java 17+ (JDK), yt-dlp, and an active
+            system FFmpeg binary mapping.
+          </p>
+
+          <div class="quick-install-box">
+            <div class="box-header">
+              <span class="badge">Install Command</span>
+              <button class="btn-copy-code" id="btnCopyInstallCmd">
+                <i data-lucide="copy"></i> Copy
+              </button>
+            </div>
+            <pre
+              class="install-pre"
+            ><code id="installCommand">git clone https://github.com/Ravitejeshnagasarapu/VidForge
+cd VidForge
+javac test.java
+java test</code></pre>
+          </div>
+
+          <div class="download-buttons-group">
+            <a
+              href="https://github.com/Ravitejeshnagasarapu/VidForge"
+              class="btn btn-primary btn-lg"
+              target="_blank"
+            >
+              <svg
+                class="lucide-icon github-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                style="
+                  width: 20px;
+                  height: 20px;
+                  display: inline-block;
+                  vertical-align: middle;
+                  margin-right: 8px;
+                "
+              >
+                <path
+                  d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"
+                ></path>
+                <path d="M9 18c-4.51 2-5-2-7-2"></path>
+              </svg>
+              <span>Browse Github Releases</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="main-footer" id="mainFooter">
+      <div class="footer-top-glow"></div>
+
+      <div class="container footer-wrapper">
+        <div class="footer-grid">
+          <div class="footer-col brand-col">
+            <div class="footer-logo">
+              <svg
+                class="logo-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                style="width: 24px; height: 24px; color: var(--primary)"
+              >
+                <path
+                  d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96 29 29 0 0 0 .46-5.33 29 29 0 0 0-.46-5.33z"
+                ></path>
+                <polygon
+                  points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"
+                  fill="currentColor"
+                ></polygon>
+              </svg>
+              <span class="brand-name">VidForge</span>
+            </div>
+            <p class="brand-description">
+              A fast, reliable, and modern YouTube downloader built with Java,
+              yt-dlp, and FFmpeg for a seamless media downloading experience.
+            </p>
+          </div>
+
+          <div class="footer-col nav-col">
+            <h4 class="col-title">
+              <i data-lucide="navigation"></i> Navigation
+            </h4>
+            <ul class="col-links">
+              <li>
+                <a href="#home"><i data-lucide="home"></i> <span>Home</span></a>
+              </li>
+              <li>
+                <a href="#preview"
+                  ><i data-lucide="play-circle"></i> <span>Simulator</span></a
+                >
+              </li>
+              <li>
+                <a href="#architecture"
+                  ><i data-lucide="cpu"></i> <span>Architecture</span></a
+                >
+              </li>
+            </ul>
+          </div>
+
+          <div class="footer-col github-col">
+            <div class="github-profile-card">
+              <a
+                href="https://github.com/ravitejeshnagasarapu"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="github-avatar-link"
+                aria-label="Visit Ravitejeshnagasarapu's GitHub Profile"
+              >
+                <div class="github-avatar-glow"></div>
+                <div class="github-avatar-container">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    class="github-large-icon"
+                    style="width: 44px; height: 44px"
+                  >
+                    <path
+                      d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"
+                    />
+                  </svg>
+                </div>
+              </a>
+              <div class="github-profile-info">
+                <h4 class="developer-name">Ravitejesh Nagasarapu</h4>
+                <span class="developer-handle">@Ravitejeshnagasarapu</span>
+              </div>
+              <a
+                href="https://github.com/ravitejeshnagasarapu"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="btn-view-github"
+                aria-label="View on GitHub"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  style="width: 14px; height: 14px"
+                >
+                  <path
+                    d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"
+                  />
+                </svg>
+                <span>View on GitHub</span>
+                <i data-lucide="arrow-right" class="arrow-icon"></i>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="/script.js"></script>
+    <script type="module" src="/ribbons.js"></script>
+  </body>
+</html>
