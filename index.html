@@ -893,19 +893,13 @@
                       <i data-lucide="layout-dashboard"></i>
                       <span>Dashboard</span>
                     </button>
-                    <button class="sidebar-item" data-tab="tab-queue">
-                      <i data-lucide="list-video"></i>
-                      <span>Download Queue</span>
-                      <span class="sidebar-badge" id="sidebarQueueCount"
-                        >0</span
-                      >
-                    </button>
-                    <button class="sidebar-item" data-tab="tab-history">
-                      <i data-lucide="history"></i>
-                      <span>Downloads History</span>
-                    </button>
                   </nav>
-                  <div class="app-sidebar-footer"></div>
+                  <div class="app-sidebar-footer">
+                    <div class="status-indicator">
+                      <span class="status-pulse-dot green"></span>
+                      <span>Engine Ready</span>
+                    </div>
+                  </div>
                 </aside>
 
                 <main class="app-content-container">
@@ -914,7 +908,7 @@
                       <i data-lucide="search" class="search-icon"></i>
                       <input
                         type="text"
-                        placeholder="Search logs, history, or configurations..."
+                        placeholder="Search configurations or terminal logs..."
                         class="header-search-input"
                       />
                     </div>
@@ -931,57 +925,50 @@
                     </div>
 
                     <div class="url-ingestion-card">
-                      <div class="url-input-group">
-                        <div class="input-icon-wrapper">
-                          <i data-lucide="link-2"></i>
+                      <div class="url-ingestion-row">
+                        <div class="url-input-group">
+                          <div class="input-icon-wrapper">
+                            <i data-lucide="link-2"></i>
+                          </div>
+                          <input
+                            type="url"
+                            id="simulationUrlInput"
+                            class="app-url-input"
+                            placeholder="Paste YouTube Video, Playlist, or Channel URL..."
+                            value="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+                          />
+                          <div class="input-shortcuts">
+                            <kbd>Ctrl</kbd><kbd>V</kbd>
+                          </div>
+                          <button
+                            id="detectClipboardBtn"
+                            class="btn-clipboard-detect"
+                            title="Paste from clipboard"
+                          >
+                            <i data-lucide="clipboard"></i>
+                          </button>
                         </div>
-                        <input
-                          type="url"
-                          id="simulationUrlInput"
-                          class="app-url-input"
-                          placeholder="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-                          value="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-                        />
-                        <button
-                          id="detectClipboardBtn"
-                          class="btn-clipboard-detect"
-                          title="Paste from clipboard"
-                        >
-                          <i data-lucide="clipboard"></i>
-                        </button>
-                      </div>
 
-                      <div class="download-configuration-grid">
                         <div class="config-select-group">
-                          <label for="simDownloadMode">Download Mode</label>
                           <select id="simDownloadMode" class="app-select">
-                            <option value="bestvideo">
-                              Best Available Video (Merge MP4 + M4A)
-                            </option>
-                            <option value="1080p">
-                              High Definition 1080p (MP4)
-                            </option>
-                            <option value="4k">
-                              Ultra HD 2160p (4K - VP9/AV1)
-                            </option>
-                            <option value="mp3">
-                              Extract Audio: High Quality MP3 (320kbps)
-                            </option>
-                            <option value="flac">
-                              Extract Audio: Lossless FLAC
-                            </option>
+                            <option value="1">Audio Only (MP3)</option>
+                            <option value="2">Audio Only (FLAC)</option>
+                            <option value="3">Video + Audio (Best)</option>
+                            <option value="4">Video + Audio (1080p)</option>
+                            <option value="5">Video + Audio (1440p)</option>
+                            <option value="6">Video + Audio (4K)</option>
                           </select>
                         </div>
-                      </div>
 
-                      <div class="action-row">
-                        <button
-                          id="startSimBtn"
-                          class="btn btn-primary btn-run-download-sim"
-                        >
-                          <i data-lucide="play"></i>
-                          <span>Start High-Fidelity Simulator Download</span>
-                        </button>
+                        <div class="action-row">
+                          <button
+                            id="startSimBtn"
+                            class="btn btn-primary btn-run-download-sim"
+                          >
+                            <i data-lucide="arrow-down-to-line"></i>
+                            <span>Download</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
 
@@ -991,15 +978,55 @@
                           class="video-thumbnail-placeholder"
                           id="simVideoThumbnail"
                         >
-                          <div class="thumb-fallback-icon">
+                          <div
+                            class="thumb-fallback-icon"
+                            id="simThumbFallback"
+                          >
                             <i data-lucide="video"></i>
+                          </div>
+                          <div
+                            class="thumb-loading-spinner hidden"
+                            id="simThumbLoading"
+                          >
+                            <i
+                              data-lucide="loader-2"
+                              class="spin-animation"
+                            ></i>
+                          </div>
+                          <img
+                            src=""
+                            alt="Video Thumbnail"
+                            class="actual-thumbnail hidden"
+                            id="simThumbImg"
+                          />
+                          <div
+                            class="thumbnail-overlays hidden"
+                            id="simThumbOverlays"
+                          >
+                            <span
+                              class="thumb-badge hd-badge hidden"
+                              id="simThumbHDBadge"
+                              >HD</span
+                            >
+                            <span
+                              class="thumb-badge duration-badge"
+                              id="simThumbDurationOverlay"
+                              >00:00</span
+                            >
                           </div>
                         </div>
                         <div class="video-details">
                           <h4 class="video-title" id="simVideoTitle">
                             Fetching media information...
                           </h4>
-                          <p class="video-channel" id="simVideoChannel">--</p>
+                          <p class="video-channel">
+                            <span id="simVideoChannel">--</span>
+                            <i
+                              data-lucide="check-circle-2"
+                              class="verified-badge hidden"
+                              id="simChannelVerified"
+                            ></i>
+                          </p>
                           <div class="video-meta-badges">
                             <span class="meta-badge" id="simVideoDuration"
                               >Duration: --</span
@@ -1055,7 +1082,7 @@
                             <span
                               class="p-stat-val text-success"
                               id="simProgressResolution"
-                              >1080p</span
+                              >-- • --</span
                             >
                             <span class="p-stat-lbl">Active Codec</span>
                           </div>
@@ -1068,295 +1095,6 @@
                           >
                         </div>
                       </div>
-                    </div>
-                  </section>
-
-                  <section class="app-tab-panel" id="tab-queue">
-                    <div class="panel-heading">
-                      <h2 class="panel-title">Active Queue Management</h2>
-                      <p class="panel-subtitle">
-                        Multi-threaded asynchronous download scheduler. Parallel
-                        pipelines download media clips concurrently.
-                      </p>
-                    </div>
-                    <div class="queue-list-wrapper">
-                      <table class="app-table">
-                        <thead>
-                          <tr>
-                            <th>Media Title</th>
-                            <th>Codec / Mode</th>
-                            <th>Status</th>
-                            <th>Size</th>
-                            <th>Progress</th>
-                          </tr>
-                        </thead>
-                        <tbody id="simQueueTableBody">
-                          <tr class="empty-row">
-                            <td colspan="5">
-                              <div class="empty-state-cell">
-                                <i data-lucide="list-video"></i>
-                                <p>
-                                  No active downloads in queue. Add URLs in the
-                                  Dashboard tab.
-                                </p>
-                              </div>
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </section>
-
-                  <section class="app-tab-panel" id="tab-history">
-                    <div class="panel-heading">
-                      <div class="heading-row-split">
-                        <div>
-                          <h2 class="panel-title">
-                            Download History (SQLite backed)
-                          </h2>
-                          <p class="panel-subtitle">
-                            Persisted logs tracking downloaded items, saved
-                            folders, sizes, and timestamps.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div class="history-controls-row">
-                      <div class="search-input-wrapper">
-                        <i data-lucide="search"></i>
-                        <input
-                          type="text"
-                          id="historySearch"
-                          placeholder="Search history..."
-                          class="history-filter-input"
-                        />
-                      </div>
-                      <div class="filter-dropdown-wrapper">
-                        <select id="historyFilterFormat" class="app-select-sm">
-                          <option value="all">All Formats</option>
-                          <option value="mp4">MP4 Video</option>
-                          <option value="mp3">MP3 Audio</option>
-                          <option value="mkv">MKV High-Quality</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div
-                      id="historyBulkActionsBar"
-                      class="bulk-actions-bar hidden"
-                    >
-                      <div class="bulk-info">
-                        <span
-                          class="selected-count-badge"
-                          id="historySelectedCountBadge"
-                          >0</span
-                        >
-                        <span id="historySelectedCountText"
-                          >items selected</span
-                        >
-                      </div>
-                      <div class="bulk-actions-buttons">
-                        <button
-                          class="btn btn-secondary btn-sm"
-                          id="btnBulkReDownload"
-                          title="Re-download selected items"
-                        >
-                          <i data-lucide="refresh-cw"></i>
-                          <span>Re-download Selected</span>
-                        </button>
-                        <button
-                          class="btn btn-danger btn-sm"
-                          id="btnBulkDelete"
-                          title="Delete selected items"
-                        >
-                          <i data-lucide="trash-2"></i>
-                          <span>Delete Selected</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    <div class="queue-list-wrapper">
-                      <table class="app-table">
-                        <thead>
-                          <tr>
-                            <th
-                              style="
-                                width: 46px;
-                                text-align: center;
-                                vertical-align: middle;
-                              "
-                            >
-                              <label class="custom-checkbox-container">
-                                <input type="checkbox" id="historySelectAll" />
-                                <span class="custom-checkbox-mark"></span>
-                              </label>
-                            </th>
-                            <th>Downloaded Title</th>
-                            <th>Format</th>
-                            <th>Size</th>
-                            <th>Date Saved</th>
-                            <th>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody id="simHistoryTableBody">
-                          <tr class="empty-row hidden" id="historyEmptyRow">
-                            <td colspan="6">
-                              <div class="empty-state-cell">
-                                <i data-lucide="history"></i>
-                                <p>
-                                  No downloads in history. Ingest URLs in the
-                                  Dashboard tab to populate!
-                                </p>
-                              </div>
-                            </td>
-                          </tr>
-                          <tr>
-                            <td
-                              style="text-align: center; vertical-align: middle"
-                            >
-                              <label class="custom-checkbox-container">
-                                <input
-                                  type="checkbox"
-                                  class="history-item-checkbox"
-                                />
-                                <span class="custom-checkbox-mark"></span>
-                              </label>
-                            </td>
-                            <td>
-                              <span class="video-title-bold"
-                                >Lofi Girl - Synthwave Radio (Beats to
-                                Chill/Study to)</span
-                              >
-                            </td>
-                            <td>
-                              <span class="badge badge-success"
-                                >Audio (MP3)</span
-                              >
-                            </td>
-                            <td>114.2 MB</td>
-                            <td>2026-07-19 14:24</td>
-                            <td>
-                              <div class="action-btn-cell">
-                                <button
-                                  class="btn-table-action"
-                                  title="Open Folder"
-                                >
-                                  <i data-lucide="folder-open"></i>
-                                </button>
-                                <button
-                                  class="btn-table-action"
-                                  title="Re-download"
-                                >
-                                  <i data-lucide="refresh-cw"></i>
-                                </button>
-                                <button
-                                  class="btn-table-action btn-delete-row"
-                                  title="Delete"
-                                >
-                                  <i data-lucide="trash-2"></i>
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                          <tr>
-                            <td
-                              style="text-align: center; vertical-align: middle"
-                            >
-                              <label class="custom-checkbox-container">
-                                <input
-                                  type="checkbox"
-                                  class="history-item-checkbox"
-                                />
-                                <span class="custom-checkbox-mark"></span>
-                              </label>
-                            </td>
-                            <td>
-                              <span class="video-title-bold"
-                                >Framer Motion Advanced Animation Tutorial
-                                2026</span
-                              >
-                            </td>
-                            <td>
-                              <span class="badge badge-primary"
-                                >Video (1080p)</span
-                              >
-                            </td>
-                            <td>342.8 MB</td>
-                            <td>2026-07-18 09:12</td>
-                            <td>
-                              <div class="action-btn-cell">
-                                <button
-                                  class="btn-table-action"
-                                  title="Open Folder"
-                                >
-                                  <i data-lucide="folder-open"></i>
-                                </button>
-                                <button
-                                  class="btn-table-action"
-                                  title="Re-download"
-                                >
-                                  <i data-lucide="refresh-cw"></i>
-                                </button>
-                                <button
-                                  class="btn-table-action btn-delete-row"
-                                  title="Delete"
-                                >
-                                  <i data-lucide="trash-2"></i>
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                          <tr>
-                            <td
-                              style="text-align: center; vertical-align: middle"
-                            >
-                              <label class="custom-checkbox-container">
-                                <input
-                                  type="checkbox"
-                                  class="history-item-checkbox"
-                                />
-                                <span class="custom-checkbox-mark"></span>
-                              </label>
-                            </td>
-                            <td>
-                              <span class="video-title-bold"
-                                >Rick Astley - Never Gonna Give You Up (Official
-                                Video)</span
-                              >
-                            </td>
-                            <td>
-                              <span class="badge badge-primary"
-                                >Video (4K)</span
-                              >
-                            </td>
-                            <td>89.4 MB</td>
-                            <td>2026-07-15 22:45</td>
-                            <td>
-                              <div class="action-btn-cell">
-                                <button
-                                  class="btn-table-action"
-                                  title="Open Folder"
-                                >
-                                  <i data-lucide="folder-open"></i>
-                                </button>
-                                <button
-                                  class="btn-table-action"
-                                  title="Re-download"
-                                >
-                                  <i data-lucide="refresh-cw"></i>
-                                </button>
-                                <button
-                                  class="btn-table-action btn-delete-row"
-                                  title="Delete"
-                                >
-                                  <i data-lucide="trash-2"></i>
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
                     </div>
                   </section>
                 </main>

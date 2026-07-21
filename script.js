@@ -591,62 +591,252 @@ document.addEventListener("DOMContentLoaded", () => {
   const simHistoryTableBody = document.getElementById("simHistoryTableBody");
 
   let isSimulatorRunning = false;
-  let simulatedItemCounter = 0;
+  let currentDownloadId = null;
+  let eventSource = null;
 
-  const videoMockDatabase = [
-    {
-      title: "Lofi Girl - Synthwave Radio (Beats to Chill/Study to)",
-      channel: "Lofi Girl",
-      duration: "Live Stream",
-      views: "18.4M views",
-      thumb:
-        "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=400&auto=format&fit=crop&q=60",
-    },
-    {
-      title: "How I Built an Audio Synthesizer in Java in 24 hours",
-      channel: "DevCraft Diaries",
-      duration: "14:25",
-      views: "124K views",
-      thumb:
-        "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&auto=format&fit=crop&q=60",
-    },
-    {
-      title: "Framer Motion Advanced Animation Tutorial 2026",
-      channel: "DesignCode",
-      duration: "32:10",
-      views: "412K views",
-      thumb:
-        "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=400&auto=format&fit=crop&q=60",
-    },
-    {
-      title: "Rick Astley - Never Gonna Give You Up (Official Video)",
-      channel: "Rick Astley",
-      duration: "3:32",
-      views: "1.4B views",
-      thumb:
-        "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&auto=format&fit=crop&q=60",
-    },
-  ];
+  function resetDownloadUI() {
+      isSimulatorRunning = false;
+      currentDownloadId = null;
+      startSimBtn.disabled = false;
+      startSimBtn.style.opacity = "1";
+      startSimBtn.classList.remove("btn-danger");
+      startSimBtn.innerHTML = '<i data-lucide="download"></i> <span>START DOWNLOAD</span>';
+      
+      sidebarQueueCount.textContent = "0";
+      sidebarQueueCount.style.background = "var(--border)";
+      
+      const progressFill = document.getElementById("simProgressFill");
+      const progressText = document.getElementById("simProgressText");
+      if (progressFill) progressFill.style.width = "0%";
+      if (progressText) progressText.textContent = "0%";
+      
+      const speedStr = document.getElementById("simSpeedStr");
+      const etaStr = document.getElementById("simEtaStr");
+      const sizeStr = document.getElementById("simSizeStr");
+      if (speedStr) speedStr.textContent = "0 KB/s";
+      if (etaStr) etaStr.textContent = "--:--";
+      if (sizeStr) sizeStr.textContent = "0 MB";
+
+      simQueueTableBody.innerHTML = `
+        <tr class="empty-row new-row-fade">
+          <td colspan="5">
+            <div class="empty-state-cell">
+              <i data-lucide="list-video"></i>
+              <p>No active downloads in queue. Add URLs in the Dashboard tab.</p>
+            </div>
+          </td>
+        </tr>
+      `;
+      if (typeof lucide !== "undefined") {
+          lucide.createIcons();
+      }
+  }
+
+  function connectSSE() {
+    if (eventSource) return;
+    eventSource = new EventSource('/api/stream');
+    
+    eventSource.addEventListener("DOWNLOAD_STARTED", (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.downloadId) currentDownloadId = data.downloadId;
+      } catch(err) {}
+
+      isSimulatorRunning = true;
+      startSimBtn.disabled = false;
+      startSimBtn.style.opacity = "1";
+      startSimBtn.classList.add("btn-danger");
+      startSimBtn.innerHTML = '<i data-lucide="square"></i> <span>STOP DOWNLOAD</span>';
+      if (typeof lucide !== "undefined") lucide.createIcons();
+      
+      simProcessPanel.classList.remove("hidden");
+      
+      sidebarQueueCount.textContent = "1";
+      sidebarQueueCount.style.background = "var(--primary)";
+      
+      simVideoTitle.textContent = "Fetching metadata...";
+      simVideoChannel.textContent = "...";
+      simVideoDuration.textContent = "Duration: ...";
+      simVideoViewCount.textContent = "Views: ...";
+      
+      const selectedMode = simDownloadMode.options[simDownloadMode.selectedIndex].text;
+      simVideoFormat.textContent = "Target: " + selectedMode;
+      
+      simQueueTableBody.innerHTML = `
+        <tr id="activeQueueSimRow" class="new-row-fade">
+          <td><span class="video-title-bold" id="queueTitleSpan">Pending...</span></td>
+          <td><span class="font-mono">${simDownloadMode.value}</span></td>
+          <td><span class="badge badge-warning" id="queueStatusBadge">Starting...</span></td>
+          <td id="queueSizeCell">Calculating...</td>
+          <td>
+            <div class="progress-track" style="height:4px; width:100px; margin-bottom:0;">
+              <div class="progress-fill" id="queueProgressFill" style="width: 0%"></div>
+            </div>
+          </td>
+        </tr>
+      `;
+      appendTerminalLine("[INFO] Download started. Handshaking with backend...", "t-blue");
+    });
+    
+    eventSource.addEventListener("METADATA_READY", (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        simVideoTitle.textContent = data.title || "Unknown";
+        simVideoChannel.textContent = data.uploader || "Unknown";
+        
+        let dur = parseInt(data.duration) || 0;
+        let mins = Math.floor(dur / 60);
+        let secs = dur % 60;
+        let timeStr = mins + ":" + (secs < 10 ? "0" : "") + secs;
+        simVideoDuration.textContent = "Duration: " + timeStr;
+        
+        const durationBadge = document.getElementById("simThumbDurationOverlay");
+        if (durationBadge) durationBadge.textContent = timeStr;
+        
+        const overlays = document.getElementById("simThumbOverlays");
+        if (overlays) overlays.classList.remove("hidden");
+        
+        const hdBadge = document.getElementById("simThumbHDBadge");
+        const selectedMode = simDownloadMode.options[simDownloadMode.selectedIndex].text;
+        if (hdBadge && (selectedMode.includes("1080") || selectedMode.includes("1440") || selectedMode.includes("4K") || selectedMode.includes("Best"))) {
+            hdBadge.classList.remove("hidden");
+        } else if (hdBadge) {
+            hdBadge.classList.add("hidden");
+        }
+        
+        const verifiedBadge = document.getElementById("simChannelVerified");
+        if (verifiedBadge) verifiedBadge.classList.remove("hidden");
+        
+        simVideoViewCount.textContent = "Views: " + (data.view_count || "Unknown");
+        
+        const fallback = document.getElementById("simThumbFallback");
+        const loading = document.getElementById("simThumbLoading");
+        const img = document.getElementById("simThumbImg");
+        if (fallback) fallback.classList.add("hidden");
+        if (img) { img.classList.remove("show"); img.classList.add("hidden"); }
+        if (loading) loading.classList.remove("hidden");
+        
+        const queueTitleSpan = document.getElementById("queueTitleSpan");
+        if (queueTitleSpan) queueTitleSpan.textContent = data.title || "Unknown";
+        
+        if (data.activeCodec && simProgressResolution) {
+          simProgressResolution.textContent = data.activeCodec;
+        }
+        
+        showToast("Metadata Ready", `Video information fetched for "${data.title}"`, "info");
+        appendTerminalLine("[INFO] Video ID matched: extracting tags and structures.", "t-blue");
+      } catch(err) {
+        console.error(err);
+      }
+    });
+    
+    eventSource.addEventListener("THUMBNAIL_READY", (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        const loading = document.getElementById("simThumbLoading");
+        const img = document.getElementById("simThumbImg");
+        const fallback = document.getElementById("simThumbFallback");
+        
+        if (img && data.path) {
+          img.src = data.path;
+          img.onload = () => {
+             if (loading) loading.classList.add("hidden");
+             img.classList.remove("hidden");
+             setTimeout(() => img.classList.add("show"), 50);
+          };
+          img.onerror = () => {
+             if (loading) loading.classList.add("hidden");
+             if (fallback) fallback.classList.remove("hidden");
+          };
+        } else {
+          if (loading) loading.classList.add("hidden");
+          if (fallback) fallback.classList.remove("hidden");
+        }
+      } catch(err) {
+        console.error(err);
+      }
+    });
+    
+    let progressAnimationFrame = null;
+    eventSource.addEventListener("PROGRESS", (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (progressAnimationFrame) cancelAnimationFrame(progressAnimationFrame);
+        progressAnimationFrame = requestAnimationFrame(() => {
+          if (progressStageLabel) progressStageLabel.textContent = "Downloading " + (data.streamType || "Stream") + "...";
+          if (progressPercentLabel) progressPercentLabel.textContent = data.percent + "%";
+          if (simProgressFill) simProgressFill.style.width = data.percent + "%";
+          if (simProgressSpeed) simProgressSpeed.textContent = data.speed;
+          if (simProgressETA) simProgressETA.textContent = data.eta;
+          if (simProgressSize) simProgressSize.textContent = data.downloadedSize + " / " + data.totalSize;
+          if (simProgressResolution && data.activeCodec) simProgressResolution.textContent = data.activeCodec;
+          if (simTickerText) simTickerText.textContent = "Current File: " + data.currentFile;
+        });
+      } catch(err) {}
+    });
+    
+    eventSource.addEventListener("STATUS", (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        appendTerminalLine(data.message, "t-blue");
+      } catch(err) {}
+    });
+    
+    eventSource.addEventListener("WARNING", (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        appendTerminalLine(data.message, "t-yellow");
+      } catch(err) {}
+    });
+    
+    eventSource.addEventListener("ERROR", (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        appendTerminalLine(data.message, "t-red");
+        showToast("Error", data.message, "error");
+      } catch(err) {}
+    });
+    
+    eventSource.addEventListener("DOWNLOAD_COMPLETE", (e) => {
+      resetDownloadUI();
+      
+      try {
+        const data = JSON.parse(e.data);
+        showToast("Download Completed", `Successfully downloaded "${data.title}"`, "success");
+        if (typeof confetti === "function") {
+          confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 }, colors: ["#dc2626", "#ef4444", "#f87171", "#ffffff"] });
+        }
+      } catch(err) {}
+    });
+    
+    eventSource.addEventListener("DOWNLOAD_FAILED", (e) => {
+      resetDownloadUI();
+      
+      try {
+        const data = JSON.parse(e.data);
+        showToast("Download Failed", data.message, "error");
+        appendTerminalLine("[ERROR] " + data.message, "t-red");
+      } catch(err) {}
+    });
+  }
+
+  connectSSE();
 
   const detectClipboardBtn = document.getElementById("detectClipboardBtn");
-  detectClipboardBtn.addEventListener("click", () => {
-    const urls = [
-      "https://www.youtube.com/watch?v=LofiGirlSynthwave",
-      "https://www.youtube.com/watch?v=DevSynth24h",
-      "https://www.youtube.com/watch?v=FramerAdvanced2026",
-      "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-    ];
-    const randomIndex = Math.floor(Math.random() * urls.length);
-    simulationUrlInput.value = urls[randomIndex];
-
-    detectClipboardBtn.style.color = "var(--primary)";
-    appendTerminalLine(
-      "[INFO] Ingesting clipboard contents: " + urls[randomIndex],
-      "t-blue",
-    );
-    setTimeout(() => {
-      detectClipboardBtn.style.color = "var(--text-secondary)";
-    }, 800);
+  detectClipboardBtn.addEventListener("click", async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text && (text.includes("http") || text.includes("youtu"))) {
+          simulationUrlInput.value = text;
+          detectClipboardBtn.style.color = "var(--primary)";
+          appendTerminalLine("[INFO] Ingesting clipboard contents: " + text, "t-blue");
+          setTimeout(() => { detectClipboardBtn.style.color = "var(--text-secondary)"; }, 800);
+      } else {
+          showToast("Clipboard Empty", "No valid URL found in clipboard.", "warning");
+      }
+    } catch(err) {
+      showToast("Clipboard Error", "Could not read clipboard.", "error");
+    }
   });
 
   if (startSimBtn && isDesktop) {
@@ -664,15 +854,25 @@ document.addEventListener("DOMContentLoaded", () => {
 
   startSimBtn.addEventListener("click", () => {
     if (isSimulatorRunning) {
-      appendTerminalLine(
-        "[WARNING] Download task currently in progress. Queue locked.",
-        "t-yellow",
-      );
-      showToast(
-        "Queue Locked",
-        "A download task is already in progress.",
-        "warning",
-      );
+      startSimBtn.disabled = true;
+      startSimBtn.style.opacity = "0.7";
+      startSimBtn.innerHTML = '<i data-lucide="loader-2" class="spin-animation"></i> <span>Stopping...</span>';
+      if (typeof lucide !== "undefined") lucide.createIcons();
+      
+      if (currentDownloadId) {
+          fetch('/api/download/cancel', {
+              method: 'POST',
+              body: JSON.stringify({ downloadId: currentDownloadId })
+          }).then(r => r.json()).then(res => {
+              if (!res.success) {
+                  showToast("Error", "Could not cancel download.", "error");
+                  resetDownloadUI();
+              }
+          }).catch(err => {
+              showToast("Error", "Could not cancel download.", "error");
+              resetDownloadUI();
+          });
+      }
       return;
     }
 
@@ -680,775 +880,89 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!targetUrl) {
       appendTerminalLine(
         "[ERROR] Missing required parameter: Target URL input is blank.",
-        "t-yellow",
+        "t-yellow"
       );
-      showToast(
-        "Download Failed to Start",
-        "Missing required parameter: Target URL input is blank.",
-        "error",
-      );
+      showToast("Download Failed", "Target URL is required.", "error");
       return;
     }
 
-    isSimulatorRunning = true;
-    startSimBtn.disabled = true;
-    startSimBtn.style.opacity = "0.5";
-    simProcessPanel.classList.remove("hidden");
+    const modeValue = simDownloadMode.value;
+    let reqMode, reqRes, reqAudio;
+    
+    if (modeValue === "1") { reqMode = "audio"; reqAudio = "mp3"; reqRes = null; }
+    else if (modeValue === "2") { reqMode = "audio"; reqAudio = "flac"; reqRes = null; }
+    else if (modeValue === "3") { reqMode = "video"; reqRes = "best"; reqAudio = null; }
+    else if (modeValue === "4") { reqMode = "video"; reqRes = "1080"; reqAudio = null; }
+    else if (modeValue === "5") { reqMode = "video"; reqRes = "1440"; reqAudio = null; }
+    else if (modeValue === "6") { reqMode = "video"; reqRes = "2160"; reqAudio = null; }
+    else { reqMode = "video"; reqRes = "best"; reqAudio = null; }
 
-    let pickedVideo = videoMockDatabase[3];
-    if (targetUrl.includes("Lofi") || targetUrl.includes("lofi")) {
-      pickedVideo = videoMockDatabase[0];
-    } else if (targetUrl.includes("Synth") || targetUrl.includes("synth")) {
-      pickedVideo = videoMockDatabase[1];
-    } else if (targetUrl.includes("Framer") || targetUrl.includes("framer")) {
-      pickedVideo = videoMockDatabase[2];
-    } else {
-      pickedVideo =
-        videoMockDatabase[Math.floor(Math.random() * videoMockDatabase.length)];
+    if (simProgressResolution) {
+      simProgressResolution.textContent = (reqMode === "audio") ? "--" : "-- • --";
     }
 
-    showToast(
-      "Download Started",
-      `Initialized yt-dlp pipeline for "${pickedVideo.title}"`,
-      "info",
-    );
-
-    simVideoTitle.textContent = pickedVideo.title;
-    simVideoChannel.textContent = pickedVideo.channel;
-    simVideoDuration.textContent = "Duration: " + pickedVideo.duration;
-    simVideoViewCount.textContent = "Views: " + pickedVideo.views;
-
-    const selectedMode =
-      simDownloadMode.options[simDownloadMode.selectedIndex].text;
-    simVideoFormat.textContent = "Target: " + selectedMode;
-    simVideoThumbnail.style.backgroundImage = `url('${pickedVideo.thumb}')`;
-
-    sidebarQueueCount.textContent = "1";
-    sidebarQueueCount.style.background = "var(--primary)";
-
-    simQueueTableBody.innerHTML = `
-      <tr id="activeQueueSimRow" class="new-row-fade">
-        <td><span class="video-title-bold">${pickedVideo.title}</span></td>
-        <td><span class="font-mono">${simDownloadMode.value}</span></td>
-        <td><span class="badge badge-warning" id="queueStatusBadge">Downloading...</span></td>
-        <td id="queueSizeCell">Calculating...</td>
-        <td>
-          <div class="progress-track" style="height:4px; width:100px; margin-bottom:0;">
-            <div class="progress-fill" id="queueProgressFill" style="width: 0%"></div>
-          </div>
-        </td>
-      </tr>
-    `;
-
-    runDownloadStages(pickedVideo);
+    const payload = {
+        url: targetUrl,
+        mode: reqMode,
+        resolution: reqRes,
+        audioFormat: reqAudio,
+        metadata: document.getElementById("simEmbedMetadata")?.checked ?? true,
+        subtitles: document.getElementById("simWriteSubtitles")?.checked ?? true
+    };
+    
+    fetch('/api/download', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+    }).catch(err => {
+        showToast("Error", "Could not reach backend.", "error");
+    });
   });
-
-  function runDownloadStages(video) {
-    const stages = [
-      {
-        progress: 5,
-        stage: "Parsing URL arguments...",
-        speed: "0.0 MB/s",
-        eta: "--:--",
-        size: "Calculating...",
-        log: "[INFO] Parsing raw ingestion command parameters. Validating youtube.com matches...",
-      },
-      {
-        progress: 12,
-        stage: "Resolving safe browser session...",
-        speed: "0.0 MB/s",
-        eta: "00:15",
-        size: "Checking...",
-        log: "[INFO] Handshaking secure player indices. Decrypting Chrome browser cookies fallbacks...",
-      },
-      {
-        progress: 24,
-        stage: "Querying video metadata...",
-        speed: "124 KB/s",
-        eta: "00:12",
-        size: "Checking...",
-        log: "[INFO] Video ID matched: extracting tags, description blocks, and structural JSON maps.",
-      },
-      {
-        progress: 38,
-        stage: "Fetching video chunks...",
-        speed: "34.2 MB/s",
-        eta: "00:08",
-        size: "184.2 MB",
-        log: "[INFO] Resolving AVC1/VP9 video format. Initiating thread segment download pipeline...",
-      },
-      {
-        progress: 56,
-        stage: "Streaming video stream...",
-        speed: "41.8 MB/s",
-        eta: "00:05",
-        size: "184.2 MB",
-        log: "[INFO] Chunk writing index 142/250 - verified byte range successfully.",
-      },
-      {
-        progress: 72,
-        stage: "Extracting highest audio codec...",
-        speed: "22.1 MB/s",
-        eta: "00:02",
-        size: "184.2 MB",
-        log: "[INFO] Video chunk download completed. Downloading audio segments: Opus high-fidelity...",
-      },
-      {
-        progress: 85,
-        stage: "Merging audio & video channels...",
-        speed: "0.0 MB/s",
-        eta: "00:01",
-        size: "192.5 MB",
-        log: "[INFO] Linking post-processors: FFmpeg mapping starting for video track + audio track...",
-      },
-      {
-        progress: 92,
-        stage: "Embedding covers & tags...",
-        speed: "0.0 MB/s",
-        eta: "00:00",
-        size: "192.8 MB",
-        log: "[INFO] Mapping album tags, thumbnail covers, lyrics frames and chapter blocks...",
-      },
-      {
-        progress: 98,
-        stage: "Finishing archiving tasks...",
-        speed: "0.0 MB/s",
-        eta: "00:00",
-        size: "192.8 MB",
-        log: "[INFO] Deleting temporary files on disk. Committing downloaded details to persistent logs...",
-      },
-      {
-        progress: 100,
-        stage: "Archive Completed successfully!",
-        speed: "0.0 MB/s",
-        eta: "00:00",
-        size: "192.8 MB",
-        log:
-          "[SUCCESS] media file saved as: downloads/" +
-          video.title.substring(0, 20) +
-          "...",
-      },
-    ];
-
-    let currentStageIndex = 0;
-
-    function executeNextStage() {
-      if (currentStageIndex >= stages.length) {
-        isSimulatorRunning = false;
-        startSimBtn.disabled = false;
-        startSimBtn.style.opacity = "1";
-        sidebarQueueCount.textContent = "0";
-        sidebarQueueCount.style.background = "var(--border)";
-
-        simQueueTableBody.innerHTML = `
-          <tr class="empty-row new-row-fade">
-            <td colspan="5">
-              <div class="empty-state-cell">
-                <i data-lucide="list-video"></i>
-                <p>No active downloads in queue. Add URLs in the Dashboard tab.</p>
-              </div>
-            </td>
-          </tr>
-        `;
-        if (typeof lucide !== "undefined") {
-          lucide.createIcons();
-        }
-
-        appendDownloadToHistory(video, stages[stages.length - 1].size);
-        showToast(
-          "Download Completed",
-          `Successfully downloaded and archived "${video.title}"`,
-          "success",
-        );
-
-        if (typeof confetti === "function") {
-          confetti({
-            particleCount: 120,
-            spread: 80,
-            origin: { y: 0.6 },
-            colors: ["#dc2626", "#ef4444", "#f87171", "#ffffff"],
-          });
-        }
-        return;
-      }
-
-      const cs = stages[currentStageIndex];
-
-      progressStageLabel.textContent = cs.stage;
-      progressPercentLabel.textContent = cs.progress + "%";
-      simProgressFill.style.width = cs.progress + "%";
-      simProgressSpeed.textContent = cs.speed;
-      simProgressETA.textContent = cs.eta;
-      simProgressSize.textContent = cs.size;
-      simTickerText.textContent = cs.log;
-
-      const queueProgressFill = document.getElementById("queueProgressFill");
-      const queueStatusBadge = document.getElementById("queueStatusBadge");
-      const queueSizeCell = document.getElementById("queueSizeCell");
-      if (queueProgressFill) queueProgressFill.style.width = cs.progress + "%";
-      if (queueSizeCell) queueSizeCell.textContent = cs.size;
-      if (queueStatusBadge && cs.progress === 100) {
-        queueStatusBadge.className = "badge badge-success";
-        queueStatusBadge.textContent = "Finished";
-      }
-
-      const logClass = cs.log.includes("[SUCCESS]") ? "t-green" : "t-blue";
-      appendTerminalLine(cs.log, logClass);
-
-      currentStageIndex++;
-      const stageDelay = cs.progress === 85 || cs.progress === 92 ? 1800 : 900;
-      setTimeout(executeNextStage, stageDelay);
-    }
-
-    executeNextStage();
-  }
 
   function appendTerminalLine(text, cssClass) {
     if (!simulationTerminal) return;
     const line = document.createElement("div");
     line.className = "terminal-line";
 
+    let formattedText = text;
+    formattedText = formattedText.replace(/\x1B\[91m/g, '<span class="t-red">');
+    formattedText = formattedText.replace(/\x1B\[92m/g, '<span class="t-green">');
+    formattedText = formattedText.replace(/\x1B\[93m/g, '<span class="t-yellow">');
+    formattedText = formattedText.replace(/\x1B\[94m/g, '<span class="t-blue">');
+    formattedText = formattedText.replace(/\x1B\[95m/g, '<span class="t-purple">');
+    formattedText = formattedText.replace(/\x1B\[96m/g, '<span class="t-cyan">');
+    formattedText = formattedText.replace(/\x1B\[1m/g, '<b>');
+    formattedText = formattedText.replace(/\x1B\[0m/g, '</span></b>');
+    formattedText = formattedText.replace(/\x1B\[G/g, '');
+    formattedText = formattedText.replace(/\x1B\[2K/g, '');
+    formattedText = formattedText.replace(/\r/g, '');
+    
+    // Some lines might have closing spans but not opening spans if they were split,
+    // but the above is a naive implementation. For terminal output, it usually works.
+    
     if (text.includes("[INFO]")) {
       line.innerHTML =
-        `<span class="t-blue">[INFO]</span> ` + text.replace("[INFO]", "");
+        `<span class="t-blue">[INFO]</span> ` + formattedText.replace("[INFO]", "");
     } else if (text.includes("[SUCCESS]")) {
       line.innerHTML =
         `<span class="t-green">[SUCCESS]</span> ` +
-        text.replace("[SUCCESS]", "");
+        formattedText.replace("[SUCCESS]", "");
     } else if (text.includes("[WARNING]")) {
       line.innerHTML =
         `<span class="t-yellow">[WARNING]</span> ` +
-        text.replace("[WARNING]", "");
+        formattedText.replace("[WARNING]", "");
     } else {
-      line.innerHTML = `<span class="${cssClass}">[INFO]</span> ` + text;
+      line.innerHTML = `<span class="${cssClass || 't-blue'}"></span> ` + formattedText;
     }
 
     simulationTerminal.appendChild(line);
     simulationTerminal.scrollTop = simulationTerminal.scrollHeight;
   }
 
-  function appendDownloadToHistory(video, size) {
-    const today = new Date().toISOString().replace("T", " ").substring(0, 16);
-    const isAudio =
-      simDownloadMode.value.includes("mp3") ||
-      simDownloadMode.value.includes("flac");
-    const formatBadgeClass = isAudio ? "badge-success" : "badge-primary";
-    const formatLabel = isAudio
-      ? "Audio (" + simDownloadMode.value.toUpperCase() + ")"
-      : "Video (" + simDownloadMode.value.toUpperCase() + ")";
-
-    const autoDeleteChecked =
-      document.getElementById("toggleAutoDeleteHistory")?.checked ?? true;
-    let autoDeleteLabelHtml = "";
-    if (autoDeleteChecked) {
-      autoDeleteLabelHtml = `<div style="margin-top: 4px; display: inline-flex; align-items: center; gap: 4px; font-size: 10px; padding: 2px 6px; background: rgba(220, 38, 38, 0.1); border: 1px solid rgba(220, 38, 38, 0.25); color: var(--primary); border-radius: 4px;" title="This completed download is scheduled to be auto-purged in 24 hours."><i data-lucide="clock" style="width: 10px; height: 10px;"></i> Auto-delete 24h</div>`;
-    }
-
-    const newRow = document.createElement("tr");
-    newRow.className = "new-row-fade row-completion-glow";
-    newRow.innerHTML = `
-      <td style="text-align: center; vertical-align: middle;">
-        <label class="custom-checkbox-container">
-          <input type="checkbox" class="history-item-checkbox">
-          <span class="custom-checkbox-mark"></span>
-        </label>
-      </td>
-      <td>
-        <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 2px;">
-          <span class="video-title-bold">${video.title}</span>
-          ${autoDeleteLabelHtml}
-        </div>
-      </td>
-      <td><span class="badge ${formatBadgeClass}">${formatLabel}</span></td>
-      <td>${size}</td>
-      <td>${today}</td>
-      <td>
-        <div class="action-btn-cell">
-          <button class="btn-table-action" title="Open Folder"><i data-lucide="folder-open"></i></button>
-          <button class="btn-table-action" title="Re-download"><i data-lucide="refresh-cw"></i></button>
-          <button class="btn-table-action btn-delete-row" title="Delete"><i data-lucide="trash-2"></i></button>
-        </div>
-      </td>
-    `;
-
-    if (simHistoryTableBody.firstChild) {
-      simHistoryTableBody.insertBefore(newRow, simHistoryTableBody.firstChild);
-    } else {
-      simHistoryTableBody.appendChild(newRow);
-    }
-
-    if (historyEmptyRow) {
-      historyEmptyRow.classList.add("hidden");
-    }
-    if (historySelectAll) {
-      historySelectAll.checked = false;
-    }
-    updateBulkActionsBar();
-
-    if (typeof lucide !== "undefined") {
-      lucide.createIcons();
-    }
-
-    appendTerminalLine(
-      "[SUCCESS] Download completed successfully. Local manifest updated.",
-      "t-green",
-    );
-  }
-
-  const historySearch = document.getElementById("historySearch");
-  const historyFilterFormat = document.getElementById("historyFilterFormat");
-
-  function filterHistoryRows() {
-    const query = historySearch.value.toLowerCase().trim();
-    const formatFilter = historyFilterFormat.value;
-    const rows = simHistoryTableBody.querySelectorAll("tr");
-
-    rows.forEach((row) => {
-      if (row.classList.contains("empty-row")) return;
-
-      const titleText = row
-        .querySelector(".video-title-bold")
-        .textContent.toLowerCase();
-      const badgeText = row.querySelector(".badge").textContent.toLowerCase();
-
-      let matchesSearch = titleText.includes(query);
-      let matchesFormat = true;
-
-      if (formatFilter === "mp3") {
-        matchesFormat =
-          badgeText.includes("audio") || badgeText.includes("mp3");
-      } else if (formatFilter === "mp4") {
-        matchesFormat =
-          badgeText.includes("video") ||
-          badgeText.includes("mp4") ||
-          badgeText.includes("1080p") ||
-          badgeText.includes("4k");
-      }
-
-      if (matchesSearch && matchesFormat) {
-        row.style.display = "";
-      } else {
-        row.style.display = "none";
-      }
-    });
-
-    if (historySelectAll) {
-      historySelectAll.checked = false;
-    }
-    updateBulkActionsBar();
-  }
-
-  if (historySearch) historySearch.addEventListener("input", filterHistoryRows);
-  if (historyFilterFormat)
-    historyFilterFormat.addEventListener("change", filterHistoryRows);
-
-  const historySelectAll = document.getElementById("historySelectAll");
-  const bulkActionsBar = document.getElementById("historyBulkActionsBar");
-  const selectedCountBadge = document.getElementById(
-    "historySelectedCountBadge",
-  );
-  const btnBulkReDownload = document.getElementById("btnBulkReDownload");
-  const btnBulkDelete = document.getElementById("btnBulkDelete");
-  const historyEmptyRow = document.getElementById("historyEmptyRow");
-
-  function updateBulkActionsBar() {
-    if (!simHistoryTableBody || !bulkActionsBar || !selectedCountBadge) return;
-
-    const checkedBoxes = simHistoryTableBody.querySelectorAll(
-      ".history-item-checkbox:checked",
-    );
-    const totalCount = checkedBoxes.length;
-
-    selectedCountBadge.textContent = totalCount;
-
-    if (totalCount > 1) {
-      bulkActionsBar.classList.remove("hidden");
-    } else {
-      bulkActionsBar.classList.add("hidden");
-    }
-
-    const rows = simHistoryTableBody.querySelectorAll("tr");
-    rows.forEach((row) => {
-      if (row.classList.contains("empty-row")) return;
-      const cb = row.querySelector(".history-item-checkbox");
-      if (cb && cb.checked) {
-        row.classList.add("selected-row");
-      } else {
-        row.classList.remove("selected-row");
-      }
-    });
-
-    if (historySelectAll) {
-      const visibleCheckboxes = Array.from(
-        simHistoryTableBody.querySelectorAll("tr"),
-      )
-        .filter(
-          (tr) =>
-            tr.style.display !== "none" && !tr.classList.contains("empty-row"),
-        )
-        .map((tr) => tr.querySelector(".history-item-checkbox"))
-        .filter(Boolean);
-
-      if (
-        visibleCheckboxes.length > 0 &&
-        visibleCheckboxes.every((cb) => cb.checked)
-      ) {
-        historySelectAll.checked = true;
-      } else {
-        historySelectAll.checked = false;
-      }
-    }
-  }
-
-  if (historySelectAll) {
-    historySelectAll.addEventListener("change", () => {
-      const isChecked = historySelectAll.checked;
-      const visibleRows = Array.from(
-        simHistoryTableBody.querySelectorAll("tr"),
-      ).filter(
-        (tr) =>
-          tr.style.display !== "none" && !tr.classList.contains("empty-row"),
-      );
-
-      visibleRows.forEach((tr) => {
-        const cb = tr.querySelector(".history-item-checkbox");
-        if (cb) {
-          cb.checked = isChecked;
-        }
-      });
-      updateBulkActionsBar();
-    });
-  }
-
-  if (simHistoryTableBody) {
-    simHistoryTableBody.addEventListener("change", (e) => {
-      if (e.target.classList.contains("history-item-checkbox")) {
-        updateBulkActionsBar();
-      }
-    });
-  }
-
-  function checkHistoryEmptyState() {
-    if (!simHistoryTableBody || !historyEmptyRow) return;
-    const rows = Array.from(simHistoryTableBody.querySelectorAll("tr")).filter(
-      (tr) => !tr.classList.contains("empty-row"),
-    );
-
-    if (rows.length === 0) {
-      historyEmptyRow.classList.remove("hidden");
-    } else {
-      historyEmptyRow.classList.add("hidden");
-    }
-  }
-
-  if (simHistoryTableBody) {
-    simHistoryTableBody.addEventListener("click", (e) => {
-      const actionBtn = e.target.closest(".btn-table-action");
-      if (!actionBtn) return;
-
-      const row = actionBtn.closest("tr");
-      const titleElement = row.querySelector(".video-title-bold");
-      if (!titleElement) return;
-      const titleText = titleElement.textContent;
-
-      if (
-        actionBtn.title === "Re-download" ||
-        actionBtn.querySelector('[data-lucide="refresh-cw"]') ||
-        actionBtn.innerHTML.includes("refresh-cw")
-      ) {
-        triggerSingleReDownload(titleText);
-      } else if (
-        actionBtn.title === "Open Folder" ||
-        actionBtn.querySelector('[data-lucide="folder-open"]') ||
-        actionBtn.innerHTML.includes("folder-open")
-      ) {
-        triggerOpenFolder(row, titleText);
-      } else if (
-        actionBtn.title === "Delete" ||
-        actionBtn.querySelector('[data-lucide="trash-2"]') ||
-        actionBtn.innerHTML.includes("trash-2")
-      ) {
-        triggerSingleDelete(row, titleText);
-      }
-    });
-  }
-
-  function triggerSingleReDownload(title) {
-    appendTerminalLine(
-      "[INFO] Initiating re-download simulation for: " + title,
-      "t-blue",
-    );
-
-    simulationUrlInput.value =
-      "https://www.youtube.com/watch?v=" +
-      title.replace(/[^a-zA-Z0-9]/g, "").substring(0, 11);
-
-    const dashboardTabBtn = document.querySelector(
-      '.sidebar-item[data-tab="tab-dashboard"]',
-    );
-    if (dashboardTabBtn) dashboardTabBtn.click();
-
-    setTimeout(() => {
-      startSimBtn.click();
-    }, 400);
-  }
-
-  function triggerOpenFolder(row, title) {
-    row.style.transition = "background-color 0.15s ease";
-    row.style.backgroundColor = "rgba(var(--primary-rgb), 0.15)";
-
-    setTimeout(() => {
-      row.style.backgroundColor = "";
-      updateBulkActionsBar();
-    }, 500);
-
-    appendTerminalLine(
-      "[SUCCESS] Opening local media folder: ./downloads/" +
-        title.substring(0, 20).replace(/\s+/g, "_") +
-        "/",
-      "t-green",
-    );
-  }
-
-  function triggerSingleDelete(row, title) {
-    appendTerminalLine(
-      "[INFO] Pruning single record from history manifest: " + title,
-      "t-blue",
-    );
-
-    row.style.transition = "all 0.4s cubic-bezier(0.16, 1, 0.3, 1)";
-    row.style.opacity = "0";
-    row.style.transform = "translateX(-20px)";
-
-    setTimeout(() => {
-      row.remove();
-      checkHistoryEmptyState();
-      updateBulkActionsBar();
-      appendTerminalLine(
-        "[SUCCESS] Successfully pruned entry: " + title,
-        "t-green",
-      );
-      showToast(
-        "Record Deleted",
-        `Successfully removed "${title}" from history.`,
-        "success",
-      );
-    }, 400);
-  }
-
-  if (btnBulkDelete) {
-    btnBulkDelete.addEventListener("click", () => {
-      const checkedRows = Array.from(
-        simHistoryTableBody.querySelectorAll("tr"),
-      ).filter((tr) => {
-        const cb = tr.querySelector(".history-item-checkbox");
-        return cb && cb.checked;
-      });
-
-      if (checkedRows.length === 0) return;
-
-      appendTerminalLine(
-        "[INFO] Bulk deleting " +
-          checkedRows.length +
-          " selected records from history manifest...",
-        "t-blue",
-      );
-
-      checkedRows.forEach((row) => {
-        row.style.transition = "all 0.4s cubic-bezier(0.16, 1, 0.3, 1)";
-        row.style.opacity = "0";
-        row.style.transform = "translateX(-20px)";
-
-        setTimeout(() => {
-          row.remove();
-          checkHistoryEmptyState();
-        }, 400);
-      });
-
-      setTimeout(() => {
-        appendTerminalLine(
-          "[SUCCESS] Successfully pruned history manifest. " +
-            checkedRows.length +
-            " entries removed securely.",
-          "t-green",
-        );
-        if (historySelectAll) historySelectAll.checked = false;
-        updateBulkActionsBar();
-        showToast(
-          "Records Deleted",
-          `Successfully deleted ${checkedRows.length} items from history.`,
-          "success",
-        );
-      }, 450);
-    });
-  }
-
-  if (btnBulkReDownload) {
-    btnBulkReDownload.addEventListener("click", () => {
-      const checkedRows = Array.from(
-        simHistoryTableBody.querySelectorAll("tr"),
-      ).filter((tr) => {
-        const cb = tr.querySelector(".history-item-checkbox");
-        return cb && cb.checked;
-      });
-
-      if (checkedRows.length === 0) return;
-
-      appendTerminalLine(
-        "[INFO] Multi-threaded bulk scheduler initialized. Queuing " +
-          checkedRows.length +
-          " items for sequential archival...",
-        "t-blue",
-      );
-      showToast(
-        "Bulk Downloads Started",
-        `Multi-threaded scheduler queued ${checkedRows.length} items for archival.`,
-        "info",
-      );
-
-      const queueTabBtn = document.querySelector(
-        '.sidebar-item[data-tab="tab-queue"]',
-      );
-      if (queueTabBtn) queueTabBtn.click();
-
-      simQueueTableBody.innerHTML = checkedRows
-        .map((row, index) => {
-          const title = row.querySelector(".video-title-bold").textContent;
-          const formatBadge = row.querySelector(".badge");
-          const format = formatBadge ? formatBadge.textContent : "Video";
-          return `
-          <tr class="new-row-fade bulk-queue-row" data-index="${index}">
-            <td><span class="video-title-bold">${title}</span></td>
-            <td><span class="font-mono">${format}</span></td>
-            <td><span class="badge badge-warning queue-item-status">Pending...</span></td>
-            <td class="queue-item-size">-- MB</td>
-            <td>
-              <div class="progress-track" style="height:4px; width:100px; margin-bottom:0;">
-                <div class="progress-fill queue-item-progress" style="width: 0%"></div>
-              </div>
-            </td>
-          </tr>
-        `;
-        })
-        .join("");
-
-      if (typeof lucide !== "undefined") {
-        lucide.createIcons();
-      }
-
-      let currentBulkIndex = 0;
-
-      function processNextBulkDownload() {
-        if (currentBulkIndex >= checkedRows.length) {
-          appendTerminalLine(
-            "[SUCCESS] Bulk re-download queue completed! All " +
-              checkedRows.length +
-              " files synchronized.",
-            "t-green",
-          );
-          showToast(
-            "Bulk Sync Completed",
-            `Successfully synchronized ${checkedRows.length} files.`,
-            "success",
-          );
-
-          setTimeout(() => {
-            simQueueTableBody.innerHTML = `
-              <tr class="empty-row new-row-fade">
-                <td colspan="5">
-                  <div class="empty-state-cell">
-                    <i data-lucide="list-video"></i>
-                    <p>No active downloads in queue. Add URLs in the Dashboard tab.</p>
-                  </div>
-                </td>
-              </tr>
-            `;
-            sidebarQueueCount.textContent = "0";
-            sidebarQueueCount.style.background = "var(--border)";
-            if (typeof lucide !== "undefined") {
-              lucide.createIcons();
-            }
-          }, 1500);
-
-          checkedRows.forEach((row) => {
-            const cb = row.querySelector(".history-item-checkbox");
-            if (cb) cb.checked = false;
-          });
-          if (historySelectAll) historySelectAll.checked = false;
-          updateBulkActionsBar();
-          return;
-        }
-
-        const currentQueueRow = simQueueTableBody.querySelector(
-          `.bulk-queue-row[data-index="${currentBulkIndex}"]`,
-        );
-        if (!currentQueueRow) return;
-
-        const statusBadge = currentQueueRow.querySelector(".queue-item-status");
-        const progressFill = currentQueueRow.querySelector(
-          ".queue-item-progress",
-        );
-        const sizeCell = currentQueueRow.querySelector(".queue-item-size");
-        const title =
-          currentQueueRow.querySelector(".video-title-bold").textContent;
-
-        statusBadge.textContent = "Downloading...";
-        statusBadge.className = "badge badge-warning queue-item-status";
-
-        sidebarQueueCount.textContent = (
-          checkedRows.length - currentBulkIndex
-        ).toString();
-        sidebarQueueCount.style.background = "var(--primary)";
-
-        appendTerminalLine(
-          "[INFO] Archiving item [" +
-            (currentBulkIndex + 1) +
-            "/" +
-            checkedRows.length +
-            "]: " +
-            title,
-          "t-blue",
-        );
-
-        let progressVal = 0;
-        const progressInterval = setInterval(() => {
-          progressVal += 10;
-          if (progressVal > 100) progressVal = 100;
-
-          progressFill.style.width = progressVal + "%";
-
-          if (progressVal === 10) {
-            sizeCell.textContent = "Calculating...";
-          } else if (progressVal === 40) {
-            sizeCell.textContent = "Checking bytes...";
-          } else if (progressVal === 70) {
-            sizeCell.textContent =
-              (Math.random() * 200 + 50).toFixed(1) + " MB";
-          }
-
-          if (progressVal === 100) {
-            clearInterval(progressInterval);
-            statusBadge.textContent = "Finished";
-            statusBadge.className = "badge badge-success queue-item-status";
-            appendTerminalLine(
-              "[SUCCESS] Item synced to downloads folder successfully.",
-              "t-green",
-            );
-            showToast(
-              "Item Synced",
-              `Successfully archived "${title}"`,
-              "success",
-            );
-
-            currentBulkIndex++;
-            setTimeout(processNextBulkDownload, 800);
-          }
-        }, 120);
-      }
-
-      processNextBulkDownload();
-    });
-  }
+  // ==========================================================================
+  // UNIFIED DOWNLOAD HISTORY DATA STORE (Single Source of Truth)
+  // ==========================================================================
+  // Clean Core Downloader State
+  appendTerminalLine("[INFO] VidForge Engine initialized.", "t-blue");
 
   const repoFileTreeItems = document.querySelectorAll(
     "#repoFileTree .tree-item",
