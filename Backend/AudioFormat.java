@@ -14,7 +14,7 @@ public enum AudioFormat {
 
     public static AudioFormat fromString(String text) {
         if (text == null || text.trim().isEmpty() || text.equalsIgnoreCase("null")) {
-            return null; // Allowed to be null
+            return null;
         }
         for (AudioFormat fmt : AudioFormat.values()) {
             if (fmt.value.equalsIgnoreCase(text.trim())) {

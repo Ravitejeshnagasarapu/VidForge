@@ -20,8 +20,7 @@ public class ThumbnailDownloader {
                     "sddefault.jpg",
                     "hqdefault.jpg",
                     "mqdefault.jpg",
-                    "default.jpg"
-            );
+                    "default.jpg");
 
             for (String fallback : fallbacks) {
                 String url = "https://i.ytimg.com/vi/" + videoId + "/" + fallback;
@@ -42,12 +41,12 @@ public class ThumbnailDownloader {
             conn.setRequestMethod("GET");
             conn.setConnectTimeout(5000);
             conn.setReadTimeout(5000);
-            
+
             if (conn.getResponseCode() == 200) {
                 return conn.getInputStream();
             }
         } catch (Exception e) {
-            // Log if necessary, but fallback will continue
+
         }
         return null;
     }

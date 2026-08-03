@@ -78,11 +78,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const downloadMode =
       document.getElementById("simDownloadMode")?.value || "bestvideo";
     const embedMetadata =
-      document.getElementById("simEmbedMetadata")?.checked ?? true;
+      document.getElementById("downloadMetadataToggle")?.checked ?? true;
+    const downloadThumbnail =
+      document.getElementById("downloadThumbnailToggle")?.checked ?? true;
     const writeSubtitles =
-      document.getElementById("simWriteSubtitles")?.checked ?? true;
+      document.getElementById("downloadSubtitlesToggle")?.checked ?? true;
     const autoDeleteChecked =
       document.getElementById("toggleAutoDeleteHistory")?.checked ?? true;
+    const downloadCookies =
+      document.getElementById("downloadCookiesSelect")?.value || "";
+    const outputFolder =
+      document.getElementById("downloadOutputFolderInput")?.value?.trim() || "";
 
     const configObj = {
       preferred_quality: downloadMode,
@@ -104,8 +110,9 @@ document.addEventListener("DOMContentLoaded", () => {
       ],
       download_subtitles: writeSubtitles,
       embed_metadata: embedMetadata,
-      embed_thumbnail: embedMetadata,
-      output_folder: "./downloads/%(uploader)s/%(title)s",
+      embed_thumbnail: downloadThumbnail,
+      download_cookies: downloadCookies,
+      output_folder: outputFolder || "./downloads/%(uploader)s/%(title)s",
       overwrite_mode: "skip_existing",
       ffmpeg_path: "auto_detect",
       proxy: "",
@@ -119,9 +126,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const inputsToTrack = [
     "simDownloadMode",
-    "simEmbedMetadata",
-    "simWriteSubtitles",
+    "downloadMetadataToggle",
+    "downloadThumbnailToggle",
+    "downloadSubtitlesToggle",
     "toggleAutoDeleteHistory",
+    "downloadCookiesSelect",
+    "downloadOutputFolderInput",
   ];
   inputsToTrack.forEach((id) => {
     const el = document.getElementById(id);
@@ -170,58 +180,33 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let isNavigating = false;
   let navigationTimeout;
-  let isHoveringNavbar = false;
-
-  if (isDesktop) {
-    window.addEventListener(
-      "mousemove",
-      (e) => {
-        if (e.clientY < 85) {
-          isHoveringNavbar = true;
-          if (navbar) {
-            navbar.classList.remove("hidden-scroll");
-          }
-        } else {
-          const navbarRect = navbar?.getBoundingClientRect();
-          if (navbarRect) {
-            if (
-              e.clientX >= navbarRect.left &&
-              e.clientX <= navbarRect.right &&
-              e.clientY >= navbarRect.top &&
-              e.clientY <= navbarRect.bottom
-            ) {
-              isHoveringNavbar = true;
-            } else {
-              isHoveringNavbar = false;
-            }
-          } else {
-            isHoveringNavbar = false;
-          }
-        }
-      },
-      { passive: true },
-    );
-  }
 
   function updateNavIndicator() {
-    if (!navIndicator || !navMenu) return;
-    const activeLink = navMenu.querySelector(".nav-link.active");
-    if (activeLink) {
-      const activeRect = activeLink.getBoundingClientRect();
-      const menuRect = navMenu.getBoundingClientRect();
-
-      const left = activeRect.left - menuRect.left;
-      const top = activeRect.top - menuRect.top;
-      const width = activeRect.width;
-      const height = activeRect.height;
-
-      navIndicator.style.transform = `translate3d(${left}px, ${top}px, 0)`;
-      navIndicator.style.width = `${width}px`;
-      navIndicator.style.height = `${height}px`;
-      navIndicator.style.opacity = "1";
-    } else {
+    if (!navMenu || !navIndicator) return;
+    const activeLink =
+      navMenu.querySelector(".nav-link.active") ||
+      navMenu.querySelector(".nav-link");
+    if (!activeLink) {
       navIndicator.style.opacity = "0";
+      return;
     }
+
+    const activeRect = activeLink.getBoundingClientRect();
+    const menuRect = navMenu.getBoundingClientRect();
+    if (!activeRect || !menuRect) {
+      navIndicator.style.opacity = "0";
+      return;
+    }
+
+    const left = Math.round(activeRect.left - menuRect.left);
+    const top = Math.round(activeRect.top - menuRect.top);
+    const width = Math.round(activeRect.width);
+    const height = Math.round(activeRect.height);
+
+    navIndicator.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+    navIndicator.style.width = `${width}px`;
+    navIndicator.style.height = `${height}px`;
+    navIndicator.style.opacity = "1";
   }
 
   function handleScroll() {
@@ -233,7 +218,7 @@ document.addEventListener("DOMContentLoaded", () => {
       navbar.classList.remove("scrolled");
     }
 
-    if (isNavigating || isHoveringNavbar) {
+    if (isNavigating) {
       navbar.classList.remove("hidden-scroll");
     } else {
       if (currentScrollY > lastScrollY && currentScrollY > 120) {
@@ -257,6 +242,26 @@ document.addEventListener("DOMContentLoaded", () => {
 
     scrollTicking = false;
   }
+
+  
+  let hoverRevealTimeout = null;
+  document.addEventListener("mousemove", (e) => {
+    try {
+      if (!navbar) return;
+      if (e.clientY <= 80) {
+        navbar.classList.remove("hidden-scroll");
+        if (hoverRevealTimeout) clearTimeout(hoverRevealTimeout);
+      } else {
+        
+        if (window.scrollY > lastScrollY && window.scrollY > 120) {
+          if (hoverRevealTimeout) clearTimeout(hoverRevealTimeout);
+          hoverRevealTimeout = setTimeout(() => {
+            if (!isNavigating) navbar.classList.add("hidden-scroll");
+          }, 800);
+        }
+      }
+    } catch (err) {}
+  });
 
   window.addEventListener(
     "scroll",
@@ -475,10 +480,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     link.addEventListener("click", (e) => {
+      e.preventDefault();
       isNavigating = true;
-      if (navbar) {
-        navbar.classList.remove("hidden-scroll");
-      }
+      if (navbar) navbar.classList.remove("hidden-scroll");
       clearTimeout(navigationTimeout);
       navigationTimeout = setTimeout(() => {
         isNavigating = false;
@@ -491,6 +495,36 @@ document.addEventListener("DOMContentLoaded", () => {
       window.requestAnimationFrame(updateNavIndicator);
 
       hideTooltip(link);
+
+      const href = link.getAttribute("href");
+      const targetId = href && href.startsWith("#") ? href.slice(1) : null;
+      if (targetId) {
+        const targetEl = document.getElementById(targetId);
+        if (targetEl) {
+          const navbarHeight = navbar
+            ? navbar.getBoundingClientRect().height
+            : 0;
+          const rect = targetEl.getBoundingClientRect();
+          const targetY =
+            window.scrollY + rect.top - Math.round(navbarHeight) - 8;
+          window.scrollTo({ top: targetY, behavior: "smooth" });
+
+          
+          document
+            .querySelectorAll(".nav-link")
+            .forEach((l) => l.classList.remove("active"));
+          link.classList.add("active");
+          window.requestAnimationFrame(updateNavIndicator);
+
+          isNavigating = true;
+          clearTimeout(navigationTimeout);
+          navigationTimeout = setTimeout(() => {
+            isNavigating = false;
+          }, 700);
+        } else {
+          window.location.hash = href;
+        }
+      }
     });
   });
 
@@ -562,264 +596,511 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  const startSimBtn = document.getElementById("startSimBtn");
-  const simulationUrlInput = document.getElementById("simulationUrlInput");
-  const simDownloadMode = document.getElementById("simDownloadMode");
-  const simProcessPanel = document.getElementById("simProcessPanel");
-
-  const simVideoTitle = document.getElementById("simVideoTitle");
-  const simVideoChannel = document.getElementById("simVideoChannel");
-  const simVideoDuration = document.getElementById("simVideoDuration");
-  const simVideoViewCount = document.getElementById("simVideoViewCount");
-  const simVideoFormat = document.getElementById("simVideoFormat");
-  const simVideoThumbnail = document.getElementById("simVideoThumbnail");
-
-  const progressStageLabel = document.getElementById("progressStageLabel");
-  const progressPercentLabel = document.getElementById("progressPercentLabel");
-  const simProgressFill = document.getElementById("simProgressFill");
-  const simProgressSpeed = document.getElementById("simProgressSpeed");
-  const simProgressETA = document.getElementById("simProgressETA");
-  const simProgressSize = document.getElementById("simProgressSize");
-  const simProgressResolution = document.getElementById(
-    "simProgressResolution",
+  let startSimBtn = document.getElementById("startSimBtn");
+  let simulationUrlInput = document.getElementById("simulationUrlInput");
+  let simDownloadMode = document.getElementById("simDownloadMode");
+  let simProcessPanel = document.getElementById("simProcessPanel");
+  let downloadMetadataToggle = document.getElementById(
+    "downloadMetadataToggle",
   );
-  const simTickerText = document.getElementById("simTickerText");
+  let downloadThumbnailToggle = document.getElementById(
+    "downloadThumbnailToggle",
+  );
+  let downloadSubtitlesToggle = document.getElementById(
+    "downloadSubtitlesToggle",
+  );
+  let downloadCookiesSelect = document.getElementById("downloadCookiesSelect");
+  let downloadOutputFolderInput = document.getElementById(
+    "downloadOutputFolderInput",
+  );
 
-  const simulationTerminal = document.getElementById("simulationTerminal");
-  const sidebarQueueCount = document.getElementById("sidebarQueueCount");
-  const simQueueTableBody = document.getElementById("simQueueTableBody");
-  const simHistoryTableBody = document.getElementById("simHistoryTableBody");
+  let simVideoTitle = document.getElementById("simVideoTitle");
+  let simVideoChannel = document.getElementById("simVideoChannel");
+  let simVideoDuration = document.getElementById("simVideoDuration");
+  let simVideoViewCount = document.getElementById("simVideoViewCount");
+  let simVideoFormat = document.getElementById("simVideoFormat");
+  let simVideoThumbnail = document.getElementById("simVideoThumbnail");
+
+  let progressStageLabel = document.getElementById("progressStageLabel");
+  let progressPercentLabel = document.getElementById("progressPercentLabel");
+  let simProgressFill = document.getElementById("simProgressFill");
+  let simProgressSpeed = document.getElementById("simProgressSpeed");
+  let simProgressETA = document.getElementById("simProgressETA");
+  let simProgressSize = document.getElementById("simProgressSize");
+  let simProgressResolution = document.getElementById("simProgressResolution");
+  let simTickerText = document.getElementById("simTickerText");
+
+  let simulationTerminal = document.getElementById("simulationTerminal");
+  let sidebarQueueCount = document.getElementById("sidebarQueueCount");
+  let simQueueTableBody = document.getElementById("simQueueTableBody");
+  let downloadHistoryList = document.getElementById("downloadHistoryList");
+
+  function refreshElements() {
+    startSimBtn = startSimBtn || document.getElementById("startSimBtn");
+    simulationUrlInput =
+      simulationUrlInput || document.getElementById("simulationUrlInput");
+    simDownloadMode =
+      simDownloadMode || document.getElementById("simDownloadMode");
+    simProcessPanel =
+      simProcessPanel || document.getElementById("simProcessPanel");
+    downloadMetadataToggle =
+      downloadMetadataToggle ||
+      document.getElementById("downloadMetadataToggle");
+    downloadThumbnailToggle =
+      downloadThumbnailToggle ||
+      document.getElementById("downloadThumbnailToggle");
+    downloadSubtitlesToggle =
+      downloadSubtitlesToggle ||
+      document.getElementById("downloadSubtitlesToggle");
+    downloadCookiesSelect =
+      downloadCookiesSelect || document.getElementById("downloadCookiesSelect");
+    downloadOutputFolderInput =
+      downloadOutputFolderInput ||
+      document.getElementById("downloadOutputFolderInput");
+
+    simVideoTitle = simVideoTitle || document.getElementById("simVideoTitle");
+    simVideoChannel =
+      simVideoChannel || document.getElementById("simVideoChannel");
+    simVideoDuration =
+      simVideoDuration || document.getElementById("simVideoDuration");
+    simVideoViewCount =
+      simVideoViewCount || document.getElementById("simVideoViewCount");
+    simVideoFormat =
+      simVideoFormat || document.getElementById("simVideoFormat");
+    simVideoThumbnail =
+      simVideoThumbnail || document.getElementById("simVideoThumbnail");
+
+    progressStageLabel =
+      progressStageLabel || document.getElementById("progressStageLabel");
+    progressPercentLabel =
+      progressPercentLabel || document.getElementById("progressPercentLabel");
+    simProgressFill =
+      simProgressFill || document.getElementById("simProgressFill");
+    simProgressSpeed =
+      simProgressSpeed || document.getElementById("simProgressSpeed");
+    simProgressETA =
+      simProgressETA || document.getElementById("simProgressETA");
+    simProgressSize =
+      simProgressSize || document.getElementById("simProgressSize");
+    simProgressResolution =
+      simProgressResolution || document.getElementById("simProgressResolution");
+    simTickerText = simTickerText || document.getElementById("simTickerText");
+
+    simulationTerminal =
+      simulationTerminal || document.getElementById("simulationTerminal");
+    sidebarQueueCount =
+      sidebarQueueCount || document.getElementById("sidebarQueueCount");
+    simQueueTableBody =
+      simQueueTableBody || document.getElementById("simQueueTableBody");
+    downloadHistoryList =
+      downloadHistoryList || document.getElementById("downloadHistoryList");
+  }
 
   let isSimulatorRunning = false;
   let currentDownloadId = null;
   let eventSource = null;
 
   function resetDownloadUI() {
-      isSimulatorRunning = false;
-      currentDownloadId = null;
+    
+    refreshElements();
+    isSimulatorRunning = false;
+    currentDownloadId = null;
+    if (startSimBtn) {
       startSimBtn.disabled = false;
       startSimBtn.style.opacity = "1";
       startSimBtn.classList.remove("btn-danger");
-      startSimBtn.innerHTML = '<i data-lucide="download"></i> <span>START DOWNLOAD</span>';
-      
+      startSimBtn.innerHTML =
+        '<i data-lucide="download"></i> <span>Download</span>';
+    }
+
+    if (sidebarQueueCount) {
       sidebarQueueCount.textContent = "0";
       sidebarQueueCount.style.background = "var(--border)";
-      
-      const progressFill = document.getElementById("simProgressFill");
-      const progressText = document.getElementById("simProgressText");
-      if (progressFill) progressFill.style.width = "0%";
-      if (progressText) progressText.textContent = "0%";
-      
-      const speedStr = document.getElementById("simSpeedStr");
-      const etaStr = document.getElementById("simEtaStr");
-      const sizeStr = document.getElementById("simSizeStr");
-      if (speedStr) speedStr.textContent = "0 KB/s";
-      if (etaStr) etaStr.textContent = "--:--";
-      if (sizeStr) sizeStr.textContent = "0 MB";
+    }
 
-      simQueueTableBody.innerHTML = `
-        <tr class="empty-row new-row-fade">
-          <td colspan="5">
-            <div class="empty-state-cell">
-              <i data-lucide="list-video"></i>
-              <p>No active downloads in queue. Add URLs in the Dashboard tab.</p>
-            </div>
-          </td>
-        </tr>
-      `;
-      if (typeof lucide !== "undefined") {
-          lucide.createIcons();
-      }
+    const progressFill = document.getElementById("simProgressFill");
+    if (progressFill) progressFill.style.width = "0%";
+
+    if (progressStageLabel)
+      progressStageLabel.textContent = "Initializing pipeline...";
+    if (progressPercentLabel) progressPercentLabel.textContent = "0%";
+    if (simProgressSpeed) simProgressSpeed.textContent = "0.0 MB/s";
+    if (simProgressETA) simProgressETA.textContent = "--:--";
+    if (simProgressSize) simProgressSize.textContent = "-- MB";
+    if (simProgressResolution) simProgressResolution.textContent = "-- • --";
+    if (simTickerText)
+      simTickerText.textContent = "Waiting for backend events...";
+
+    if (typeof lucide !== "undefined") {
+      lucide.createIcons();
+    }
+  }
+
+  function renderHistoryEntry(entry) {
+    if (!downloadHistoryList) return;
+    const item = document.createElement("div");
+    item.className = "rcs-item";
+    item.innerHTML = `
+      <div class="rcs-thumb">
+        <img src="${entry.thumbnail || ""}" alt="${entry.title || "Download"}" onerror="this.style.display='none'" />
+      </div>
+      <div class="rcs-info">
+        <div class="rcs-name">${entry.title || "Unknown"}</div>
+        <div class="rcs-meta">
+          <span class="rcs-format-badge">${entry.format || "Unknown"}</span>
+          <span class="rcs-time">${entry.date || "Unknown date"}</span>
+        </div>
+      </div>
+    `;
+    downloadHistoryList.prepend(item);
   }
 
   function connectSSE() {
     if (eventSource) return;
-    eventSource = new EventSource('/api/stream');
-    
+    eventSource = new EventSource("/api/stream");
+
+    eventSource.onerror = () => {
+      if (eventSource && eventSource.readyState === EventSource.CLOSED) {
+        eventSource = null;
+        setTimeout(connectSSE, 5000);
+      }
+    };
+
     eventSource.addEventListener("DOWNLOAD_STARTED", (e) => {
       try {
         const data = JSON.parse(e.data);
         if (data.downloadId) currentDownloadId = data.downloadId;
-      } catch(err) {}
+      } catch (err) {}
 
       isSimulatorRunning = true;
-      startSimBtn.disabled = false;
-      startSimBtn.style.opacity = "1";
-      startSimBtn.classList.add("btn-danger");
-      startSimBtn.innerHTML = '<i data-lucide="square"></i> <span>STOP DOWNLOAD</span>';
+      if (startSimBtn) {
+        startSimBtn.disabled = false;
+        startSimBtn.style.opacity = "1";
+        startSimBtn.classList.add("btn-danger");
+        startSimBtn.innerHTML =
+          '<i data-lucide="square"></i> <span>Stop Download</span>';
+      }
       if (typeof lucide !== "undefined") lucide.createIcons();
-      
-      simProcessPanel.classList.remove("hidden");
-      
-      sidebarQueueCount.textContent = "1";
-      sidebarQueueCount.style.background = "var(--primary)";
-      
-      simVideoTitle.textContent = "Fetching metadata...";
-      simVideoChannel.textContent = "...";
-      simVideoDuration.textContent = "Duration: ...";
-      simVideoViewCount.textContent = "Views: ...";
-      
-      const selectedMode = simDownloadMode.options[simDownloadMode.selectedIndex].text;
-      simVideoFormat.textContent = "Target: " + selectedMode;
-      
-      simQueueTableBody.innerHTML = `
-        <tr id="activeQueueSimRow" class="new-row-fade">
-          <td><span class="video-title-bold" id="queueTitleSpan">Pending...</span></td>
-          <td><span class="font-mono">${simDownloadMode.value}</span></td>
-          <td><span class="badge badge-warning" id="queueStatusBadge">Starting...</span></td>
-          <td id="queueSizeCell">Calculating...</td>
-          <td>
-            <div class="progress-track" style="height:4px; width:100px; margin-bottom:0;">
-              <div class="progress-fill" id="queueProgressFill" style="width: 0%"></div>
-            </div>
-          </td>
-        </tr>
-      `;
-      appendTerminalLine("[INFO] Download started. Handshaking with backend...", "t-blue");
+
+      if (simProcessPanel) simProcessPanel.classList.remove("hidden");
+
+      if (sidebarQueueCount) {
+        sidebarQueueCount.textContent = "1";
+        sidebarQueueCount.style.background = "var(--primary)";
+      }
+
+      if (simVideoTitle) simVideoTitle.textContent = "Fetching metadata...";
+      if (simVideoChannel) simVideoChannel.textContent = "...";
+      if (simVideoDuration) simVideoDuration.textContent = "Duration: ...";
+      if (simVideoViewCount) simVideoViewCount.textContent = "Views: ...";
+
+      const selectedMode =
+        simDownloadMode &&
+        simDownloadMode.options &&
+        simDownloadMode.selectedIndex >= 0
+          ? simDownloadMode.options[simDownloadMode.selectedIndex].text
+          : null;
+      if (selectedMode && simVideoFormat)
+        simVideoFormat.textContent = "Target: " + selectedMode;
+      appendTerminalLine(
+        "[INFO] Download started. Handshaking with backend...",
+        "t-blue",
+      );
     });
-    
+
     eventSource.addEventListener("METADATA_READY", (e) => {
       try {
-        const data = JSON.parse(e.data);
+        const data = JSON.parse(e.data || "{}");
+
+        if (
+          currentDownloadId &&
+          data.downloadId &&
+          data.downloadId !== currentDownloadId
+        ) {
+          return;
+        }
+
         simVideoTitle.textContent = data.title || "Unknown";
         simVideoChannel.textContent = data.uploader || "Unknown";
-        
+
         let dur = parseInt(data.duration) || 0;
         let mins = Math.floor(dur / 60);
         let secs = dur % 60;
         let timeStr = mins + ":" + (secs < 10 ? "0" : "") + secs;
         simVideoDuration.textContent = "Duration: " + timeStr;
-        
-        const durationBadge = document.getElementById("simThumbDurationOverlay");
+
+        const durationBadge = document.getElementById(
+          "simThumbDurationOverlay",
+        );
         if (durationBadge) durationBadge.textContent = timeStr;
-        
+
         const overlays = document.getElementById("simThumbOverlays");
         if (overlays) overlays.classList.remove("hidden");
-        
+
         const hdBadge = document.getElementById("simThumbHDBadge");
-        const selectedMode = simDownloadMode.options[simDownloadMode.selectedIndex].text;
-        if (hdBadge && (selectedMode.includes("1080") || selectedMode.includes("1440") || selectedMode.includes("4K") || selectedMode.includes("Best"))) {
-            hdBadge.classList.remove("hidden");
+        const selectedMode =
+          simDownloadMode.options[simDownloadMode.selectedIndex].text;
+        if (
+          hdBadge &&
+          (selectedMode.includes("1080") ||
+            selectedMode.includes("1440") ||
+            selectedMode.includes("4K") ||
+            selectedMode.includes("Best"))
+        ) {
+          hdBadge.classList.remove("hidden");
         } else if (hdBadge) {
-            hdBadge.classList.add("hidden");
+          hdBadge.classList.add("hidden");
         }
-        
+
         const verifiedBadge = document.getElementById("simChannelVerified");
         if (verifiedBadge) verifiedBadge.classList.remove("hidden");
-        
-        simVideoViewCount.textContent = "Views: " + (data.view_count || "Unknown");
-        
+
+        simVideoViewCount.textContent =
+          "Views: " + (data.view_count || "Unknown");
+
         const fallback = document.getElementById("simThumbFallback");
         const loading = document.getElementById("simThumbLoading");
         const img = document.getElementById("simThumbImg");
         if (fallback) fallback.classList.add("hidden");
-        if (img) { img.classList.remove("show"); img.classList.add("hidden"); }
+        if (img) {
+          img.classList.remove("show");
+          img.classList.add("hidden");
+        }
         if (loading) loading.classList.remove("hidden");
-        
+
         const queueTitleSpan = document.getElementById("queueTitleSpan");
-        if (queueTitleSpan) queueTitleSpan.textContent = data.title || "Unknown";
-        
+        if (queueTitleSpan)
+          queueTitleSpan.textContent = data.title || "Unknown";
+
         if (data.activeCodec && simProgressResolution) {
           simProgressResolution.textContent = data.activeCodec;
         }
-        
-        showToast("Metadata Ready", `Video information fetched for "${data.title}"`, "info");
-        appendTerminalLine("[INFO] Video ID matched: extracting tags and structures.", "t-blue");
-      } catch(err) {
+
+        if (data.thumbnail && simVideoThumbnail) {
+          const thumbImg = document.getElementById("simThumbImg");
+          const thumbFallback = document.getElementById("simThumbFallback");
+          if (thumbImg) {
+            thumbImg.src = data.thumbnail;
+            thumbImg.classList.remove("hidden");
+          }
+          if (thumbFallback) thumbFallback.classList.add("hidden");
+        }
+
+        showToast(
+          "Metadata Ready",
+          `Video information fetched for "${data.title}"`,
+          "info",
+        );
+        appendTerminalLine(
+          "[INFO] Video ID matched: extracting tags and structures.",
+          "t-blue",
+        );
+      } catch (err) {
         console.error(err);
       }
     });
-    
+
     eventSource.addEventListener("THUMBNAIL_READY", (e) => {
       try {
-        const data = JSON.parse(e.data);
+        const data = JSON.parse(e.data || "{}");
+
+        if (
+          currentDownloadId &&
+          data.downloadId &&
+          data.downloadId !== currentDownloadId
+        ) {
+          return;
+        }
+
         const loading = document.getElementById("simThumbLoading");
         const img = document.getElementById("simThumbImg");
         const fallback = document.getElementById("simThumbFallback");
-        
+
         if (img && data.path) {
-          img.src = data.path;
+          
+          img.dataset.triedAlt = "0";
           img.onload = () => {
-             if (loading) loading.classList.add("hidden");
-             img.classList.remove("hidden");
-             setTimeout(() => img.classList.add("show"), 50);
+            if (loading) loading.classList.add("hidden");
+            img.classList.remove("hidden");
+            setTimeout(() => img.classList.add("show"), 50);
           };
-          img.onerror = () => {
-             if (loading) loading.classList.add("hidden");
-             if (fallback) fallback.classList.remove("hidden");
+          img.onerror = function () {
+            if (this.dataset.triedAlt !== "1") {
+              this.dataset.triedAlt = "1";
+              let alt = null;
+              try {
+                if (data.path && data.path.includes("/")) {
+                  const fname = data.path.split("/").pop();
+                  alt = "/cache/thumbnails/" + fname;
+                }
+                if (!alt && data.videoId) {
+                  alt = "/cache/thumbnails/" + data.videoId + ".jpg";
+                }
+              } catch (err) {
+                alt = null;
+              }
+              if (alt && this.src !== alt) {
+                this.src = alt;
+                return;
+              }
+            }
+            if (loading) loading.classList.add("hidden");
+            if (fallback) fallback.classList.remove("hidden");
           };
+          img.src = data.path;
         } else {
           if (loading) loading.classList.add("hidden");
           if (fallback) fallback.classList.remove("hidden");
         }
-      } catch(err) {
+      } catch (err) {
         console.error(err);
       }
     });
-    
+
     let progressAnimationFrame = null;
     eventSource.addEventListener("PROGRESS", (e) => {
       try {
-        const data = JSON.parse(e.data);
-        if (progressAnimationFrame) cancelAnimationFrame(progressAnimationFrame);
+        const data = JSON.parse(e.data || "{}");
+
+        if (
+          currentDownloadId &&
+          data.downloadId &&
+          data.downloadId !== currentDownloadId
+        ) {
+          return;
+        }
+
+        if (progressAnimationFrame)
+          cancelAnimationFrame(progressAnimationFrame);
         progressAnimationFrame = requestAnimationFrame(() => {
-          if (progressStageLabel) progressStageLabel.textContent = "Downloading " + (data.streamType || "Stream") + "...";
-          if (progressPercentLabel) progressPercentLabel.textContent = data.percent + "%";
+          if (progressStageLabel)
+            progressStageLabel.textContent =
+              "Downloading " + (data.streamType || "Stream") + "...";
+          if (progressPercentLabel)
+            progressPercentLabel.textContent = data.percent + "%";
           if (simProgressFill) simProgressFill.style.width = data.percent + "%";
           if (simProgressSpeed) simProgressSpeed.textContent = data.speed;
           if (simProgressETA) simProgressETA.textContent = data.eta;
-          if (simProgressSize) simProgressSize.textContent = data.downloadedSize + " / " + data.totalSize;
-          if (simProgressResolution && data.activeCodec) simProgressResolution.textContent = data.activeCodec;
-          if (simTickerText) simTickerText.textContent = "Current File: " + data.currentFile;
+          if (simProgressSize)
+            simProgressSize.textContent =
+              data.downloadedSize + " / " + data.totalSize;
+          if (simProgressResolution && data.activeCodec)
+            simProgressResolution.textContent = data.activeCodec;
+          if (simTickerText)
+            simTickerText.textContent = "Current File: " + data.currentFile;
         });
-      } catch(err) {}
+      } catch (err) {}
     });
-    
+
     eventSource.addEventListener("STATUS", (e) => {
       try {
-        const data = JSON.parse(e.data);
+        const data = JSON.parse(e.data || "{}");
+        
+        if (
+          currentDownloadId &&
+          data.downloadId &&
+          data.downloadId !== currentDownloadId
+        ) {
+          return;
+        }
+
         appendTerminalLine(data.message, "t-blue");
-      } catch(err) {}
+      } catch (err) {}
     });
-    
+
     eventSource.addEventListener("WARNING", (e) => {
       try {
-        const data = JSON.parse(e.data);
+        const data = JSON.parse(e.data || "{}");
+
+        if (
+          currentDownloadId &&
+          data.downloadId &&
+          data.downloadId !== currentDownloadId
+        ) {
+          return;
+        }
+
         appendTerminalLine(data.message, "t-yellow");
-      } catch(err) {}
+      } catch (err) {}
     });
-    
+
     eventSource.addEventListener("ERROR", (e) => {
       try {
-        const data = JSON.parse(e.data);
+        const data = JSON.parse(e.data || "{}");
+
+        if (
+          currentDownloadId &&
+          data.downloadId &&
+          data.downloadId !== currentDownloadId
+        ) {
+          return;
+        }
+
         appendTerminalLine(data.message, "t-red");
         showToast("Error", data.message, "error");
-      } catch(err) {}
+      } catch (err) {}
     });
-    
+
     eventSource.addEventListener("DOWNLOAD_COMPLETE", (e) => {
-      resetDownloadUI();
-      
       try {
-        const data = JSON.parse(e.data);
-        showToast("Download Completed", `Successfully downloaded "${data.title}"`, "success");
-        if (typeof confetti === "function") {
-          confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 }, colors: ["#dc2626", "#ef4444", "#f87171", "#ffffff"] });
+        const data = JSON.parse(e.data || "{}");
+
+        if (
+          currentDownloadId &&
+          data.downloadId &&
+          data.downloadId !== currentDownloadId
+        ) {
+          return;
         }
-      } catch(err) {}
+
+        resetDownloadUI();
+
+        renderHistoryEntry({
+          title: data.title || "Unknown",
+          thumbnail: data.thumbnail || "",
+          date: new Date().toLocaleString(),
+          path: data.path || "",
+          format: data.format || "Unknown",
+          size: data.size || "Unknown",
+          status: "Completed",
+        });
+        showToast(
+          "Download Completed",
+          `Successfully downloaded "${data.title}"`,
+          "success",
+        );
+        if (typeof confetti === "function") {
+          confetti({
+            particleCount: 120,
+            spread: 80,
+            origin: { y: 0.6 },
+            colors: ["#dc2626", "#ef4444", "#f87171", "#ffffff"],
+          });
+        }
+      } catch (err) {}
     });
-    
+
     eventSource.addEventListener("DOWNLOAD_FAILED", (e) => {
-      resetDownloadUI();
-      
       try {
-        const data = JSON.parse(e.data);
+        const data = JSON.parse(e.data || "{}");
+
+        if (
+          currentDownloadId &&
+          data.downloadId &&
+          data.downloadId !== currentDownloadId
+        ) {
+          return;
+        }
+
+        resetDownloadUI();
+
         showToast("Download Failed", data.message, "error");
         appendTerminalLine("[ERROR] " + data.message, "t-red");
-      } catch(err) {}
+      } catch (err) {}
     });
   }
 
+  refreshElements();
   connectSSE();
 
   const detectClipboardBtn = document.getElementById("detectClipboardBtn");
@@ -827,50 +1108,51 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       const text = await navigator.clipboard.readText();
       if (text && (text.includes("http") || text.includes("youtu"))) {
-          simulationUrlInput.value = text;
-          detectClipboardBtn.style.color = "var(--primary)";
-          appendTerminalLine("[INFO] Ingesting clipboard contents: " + text, "t-blue");
-          setTimeout(() => { detectClipboardBtn.style.color = "var(--text-secondary)"; }, 800);
+        simulationUrlInput.value = text;
+        detectClipboardBtn.style.color = "var(--primary)";
+        appendTerminalLine(
+          "[INFO] Ingesting clipboard contents: " + text,
+          "t-blue",
+        );
+        setTimeout(() => {
+          detectClipboardBtn.style.color = "var(--text-secondary)";
+        }, 800);
       } else {
-          showToast("Clipboard Empty", "No valid URL found in clipboard.", "warning");
+        showToast(
+          "Clipboard Empty",
+          "No valid URL found in clipboard.",
+          "warning",
+        );
       }
-    } catch(err) {
+    } catch (err) {
       showToast("Clipboard Error", "Could not read clipboard.", "error");
     }
   });
 
-  if (startSimBtn && isDesktop) {
-    startSimBtn.classList.add("magnetic-btn");
-    startSimBtn.addEventListener("mousemove", (e) => {
-      const rect = startSimBtn.getBoundingClientRect();
-      const x = e.clientX - rect.left - rect.width / 2;
-      const y = e.clientY - rect.top - rect.height / 2;
-      startSimBtn.style.transform = `translate(${x * 0.15}px, ${y * 0.15}px)`;
-    });
-    startSimBtn.addEventListener("mouseleave", () => {
-      startSimBtn.style.transform = `translate(0px, 0px)`;
-    });
-  }
-
+  refreshElements();
   startSimBtn.addEventListener("click", () => {
     if (isSimulatorRunning) {
       startSimBtn.disabled = true;
       startSimBtn.style.opacity = "0.7";
-      startSimBtn.innerHTML = '<i data-lucide="loader-2" class="spin-animation"></i> <span>Stopping...</span>';
+      startSimBtn.innerHTML =
+        '<i data-lucide="loader-2" class="spin-animation"></i> <span>Stopping...</span>';
       if (typeof lucide !== "undefined") lucide.createIcons();
-      
+
       if (currentDownloadId) {
-          fetch('/api/download/cancel', {
-              method: 'POST',
-              body: JSON.stringify({ downloadId: currentDownloadId })
-          }).then(r => r.json()).then(res => {
-              if (!res.success) {
-                  showToast("Error", "Could not cancel download.", "error");
-                  resetDownloadUI();
-              }
-          }).catch(err => {
+        fetch("/api/download/cancel", {
+          method: "POST",
+          body: JSON.stringify({ downloadId: currentDownloadId }),
+        })
+          .then((r) => r.json())
+          .then((res) => {
+            if (!res.success) {
               showToast("Error", "Could not cancel download.", "error");
               resetDownloadUI();
+            }
+          })
+          .catch((err) => {
+            showToast("Error", "Could not cancel download.", "error");
+            resetDownloadUI();
           });
       }
       return;
@@ -880,7 +1162,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!targetUrl) {
       appendTerminalLine(
         "[ERROR] Missing required parameter: Target URL input is blank.",
-        "t-yellow"
+        "t-yellow",
       );
       showToast("Download Failed", "Target URL is required.", "error");
       return;
@@ -888,33 +1170,59 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const modeValue = simDownloadMode.value;
     let reqMode, reqRes, reqAudio;
-    
-    if (modeValue === "1") { reqMode = "audio"; reqAudio = "mp3"; reqRes = null; }
-    else if (modeValue === "2") { reqMode = "audio"; reqAudio = "flac"; reqRes = null; }
-    else if (modeValue === "3") { reqMode = "video"; reqRes = "best"; reqAudio = null; }
-    else if (modeValue === "4") { reqMode = "video"; reqRes = "1080"; reqAudio = null; }
-    else if (modeValue === "5") { reqMode = "video"; reqRes = "1440"; reqAudio = null; }
-    else if (modeValue === "6") { reqMode = "video"; reqRes = "2160"; reqAudio = null; }
-    else { reqMode = "video"; reqRes = "best"; reqAudio = null; }
+
+    if (modeValue === "1") {
+      reqMode = "audio";
+      reqAudio = "mp3";
+      reqRes = null;
+    } else if (modeValue === "2") {
+      reqMode = "audio";
+      reqAudio = "flac";
+      reqRes = null;
+    } else if (modeValue === "3") {
+      reqMode = "video";
+      reqRes = "best";
+      reqAudio = null;
+    } else if (modeValue === "4") {
+      reqMode = "video";
+      reqRes = "1080";
+      reqAudio = null;
+    } else if (modeValue === "5") {
+      reqMode = "video";
+      reqRes = "1440";
+      reqAudio = null;
+    } else if (modeValue === "6") {
+      reqMode = "video";
+      reqRes = "2160";
+      reqAudio = null;
+    } else {
+      reqMode = "video";
+      reqRes = "best";
+      reqAudio = null;
+    }
 
     if (simProgressResolution) {
-      simProgressResolution.textContent = (reqMode === "audio") ? "--" : "-- • --";
+      simProgressResolution.textContent =
+        reqMode === "audio" ? "--" : "-- • --";
     }
 
     const payload = {
-        url: targetUrl,
-        mode: reqMode,
-        resolution: reqRes,
-        audioFormat: reqAudio,
-        metadata: document.getElementById("simEmbedMetadata")?.checked ?? true,
-        subtitles: document.getElementById("simWriteSubtitles")?.checked ?? true
+      url: targetUrl,
+      mode: reqMode,
+      resolution: reqRes,
+      audioFormat: reqAudio,
+      metadata: downloadMetadataToggle?.checked ?? true,
+      thumbnail: downloadThumbnailToggle?.checked ?? true,
+      subtitles: downloadSubtitlesToggle?.checked ?? true,
+      outputFolder: downloadOutputFolderInput?.value?.trim() || "",
+      cookies: downloadCookiesSelect?.value || "",
     };
-    
-    fetch('/api/download', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-    }).catch(err => {
-        showToast("Error", "Could not reach backend.", "error");
+
+    fetch("/api/download", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }).catch((err) => {
+      showToast("Error", "Could not reach backend.", "error");
     });
   });
 
@@ -925,23 +1233,39 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let formattedText = text;
     formattedText = formattedText.replace(/\x1B\[91m/g, '<span class="t-red">');
-    formattedText = formattedText.replace(/\x1B\[92m/g, '<span class="t-green">');
-    formattedText = formattedText.replace(/\x1B\[93m/g, '<span class="t-yellow">');
-    formattedText = formattedText.replace(/\x1B\[94m/g, '<span class="t-blue">');
-    formattedText = formattedText.replace(/\x1B\[95m/g, '<span class="t-purple">');
-    formattedText = formattedText.replace(/\x1B\[96m/g, '<span class="t-cyan">');
-    formattedText = formattedText.replace(/\x1B\[1m/g, '<b>');
-    formattedText = formattedText.replace(/\x1B\[0m/g, '</span></b>');
-    formattedText = formattedText.replace(/\x1B\[G/g, '');
-    formattedText = formattedText.replace(/\x1B\[2K/g, '');
-    formattedText = formattedText.replace(/\r/g, '');
+    formattedText = formattedText.replace(
+      /\x1B\[92m/g,
+      '<span class="t-green">',
+    );
+    formattedText = formattedText.replace(
+      /\x1B\[93m/g,
+      '<span class="t-yellow">',
+    );
+    formattedText = formattedText.replace(
+      /\x1B\[94m/g,
+      '<span class="t-blue">',
+    );
+    formattedText = formattedText.replace(
+      /\x1B\[95m/g,
+      '<span class="t-purple">',
+    );
+    formattedText = formattedText.replace(
+      /\x1B\[96m/g,
+      '<span class="t-cyan">',
+    );
+    formattedText = formattedText.replace(/\x1B\[1m/g, "<b>");
+    formattedText = formattedText.replace(/\x1B\[0m/g, "</span></b>");
+    formattedText = formattedText.replace(/\x1B\[G/g, "");
+    formattedText = formattedText.replace(/\x1B\[2K/g, "");
+    formattedText = formattedText.replace(/\r/g, "");
+
     
-    // Some lines might have closing spans but not opening spans if they were split,
-    // but the above is a naive implementation. For terminal output, it usually works.
     
+
     if (text.includes("[INFO]")) {
       line.innerHTML =
-        `<span class="t-blue">[INFO]</span> ` + formattedText.replace("[INFO]", "");
+        `<span class="t-blue">[INFO]</span> ` +
+        formattedText.replace("[INFO]", "");
     } else if (text.includes("[SUCCESS]")) {
       line.innerHTML =
         `<span class="t-green">[SUCCESS]</span> ` +
@@ -951,17 +1275,14 @@ document.addEventListener("DOMContentLoaded", () => {
         `<span class="t-yellow">[WARNING]</span> ` +
         formattedText.replace("[WARNING]", "");
     } else {
-      line.innerHTML = `<span class="${cssClass || 't-blue'}"></span> ` + formattedText;
+      line.innerHTML =
+        `<span class="${cssClass || "t-blue"}"></span> ` + formattedText;
     }
 
     simulationTerminal.appendChild(line);
     simulationTerminal.scrollTop = simulationTerminal.scrollHeight;
   }
 
-  // ==========================================================================
-  // UNIFIED DOWNLOAD HISTORY DATA STORE (Single Source of Truth)
-  // ==========================================================================
-  // Clean Core Downloader State
   appendTerminalLine("[INFO] VidForge Engine initialized.", "t-blue");
 
   const repoFileTreeItems = document.querySelectorAll(
@@ -976,7 +1297,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "Main.java": {
       title: "Application Entry & Interactive CLI",
       desc: "The primary entry point of the Java application. Initializes the YouTubeDownloader, handles user inputs, cleans URLs, displays options (1-6), and orchestrates the download process.",
-      code: "import java.io.*;\nimport java.nio.file.*;\nimport java.util.*;\nimport java.util.logging.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        ConsoleRenderer.printBanner();\n        // Option menu and downloader orchestration\n    }\n}",
+      code: `import java.io.*;\nimport java.nio.file.*;\nimport java.util.*;\nimport java.util.logging.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        ConsoleRenderer.printBanner();\n    }\n}`,
     },
     Configuration: {
       title: "Internal Static Config Options",
@@ -991,7 +1312,7 @@ document.addEventListener("DOMContentLoaded", () => {
     ProgressParser: {
       title: "Asynchronous CLI Progress Tracker",
       desc: "Parses newline-delimited output lines from the yt-dlp subprocess in real-time, extracting percentages, speed, and ETA to draw a high-contrast console progress bar.",
-      code: 'public static class ProgressParser {\n    private static final Pattern PROGRESS_PATTERN = Pattern.compile("\\\\\\\[download\\\\\\\]\\\\\\\\s+([\\\\\\\\d\\\\\\\\.]+%)\\\\\\\\s+of\\\\\\\\s+([^\\\\\\\\s]+)\\\\\\\\s+at\\\\\\\\s+([^\\\\\\\\s]+)\\\\\\\\s+ETA\\\\\\\\s+([^\\\\\\\\s]+)");\n    public static void parseLine(String line, ProgressBar bar, DownloadStatistics stats) {\n        // Real-time regex matching and status parsing\n    }\n}',
+      code: 'public static class ProgressParser {\n    private static final Pattern PROGRESS_PATTERN = Pattern.compile("\\\\[download\\\\]\\\\s+([\\\\d\\\\.]+%)\\\\s+of\\\\s+([^\\\\s]+)\\\\s+at\\\\s+([^\\\\s]+)\\\\s+ETA\\\\s+([^\\\\s]+)");\n    public static void parseLine(String line, ProgressBar bar, DownloadStatistics stats) {\n        // parses yt-dlp stdout and updates the progress bar\n    }\n}',
     },
     DownloadStatistics: {
       title: "Runtime Ingestion Statistics",
@@ -1001,7 +1322,7 @@ document.addEventListener("DOMContentLoaded", () => {
     YouTubeDownloader: {
       title: "Subprocess Execution & Resiliency Handler",
       desc: "Launches the underlying yt-dlp binary as an external ProcessBuilder. Automatically falls back to decrypted browser cookies across Chrome, Edge, Firefox, and Brave if blocked.",
-      code: "public static class YouTubeDownloader {\n    public Map<String, String> getMetadata(String url) {\n        // Runs yt-dlp --dump-json to extract details\n    }\n    public void download(String url, String mode, String resolution, String audioFmt, Map<String, String> meta) {\n        // Configures command line arguments and runs ProcessBuilder\n    }\n}",
+      code: "public static class YouTubeDownloader {\n    public Map<String, String> getMetadata(String url) {\n        // executes yt-dlp --dump-json and parses the JSON result\n    }\n}",
     },
     Logger: {
       title: "Persistent Event Logger",
