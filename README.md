@@ -1,8 +1,4 @@
-# VidForge
-
-<p align="center">
-  <img src="assets/banner.png" alt="VidForge Banner" width="100%">
-</p>
+<h1 align="center">VidForge</h1>
 
 <p align="center">
   <strong>A modern YouTube downloader built with Java, featuring a responsive web interface, real-time download tracking, and support for high-quality video and audio downloads.</strong>
