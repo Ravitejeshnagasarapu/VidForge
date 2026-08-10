@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="100%" height="100%">
+  <defs>
+    <!-- Filter for the soft outer red glow -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="25" result="blur" />
+    </filter>
+  </defs>
+
+  <!-- Glowing drop shadow background -->
+  <circle cx="150" cy="150" r="80" fill="#DA251D" filter="url(#glow)" opacity="0.65" />
+
+  <!-- Main solid red circle -->
+  <circle cx="150" cy="150" r="85" fill="#DA251D" />
+
+  <!-- White rounded rectangle outline -->
+  <rect x="104" y="118" width="92" height="64" rx="18" ry="18" fill="none" stroke="#FFFFFF" stroke-width="8" />
+
+  <!-- Solid white play triangle with slightly rounded corners -->
+  <path d="M 134 135 L 134 165 L 162 150 Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="5" stroke-linejoin="round" />
+</svg>
