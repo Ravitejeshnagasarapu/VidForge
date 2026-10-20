@@ -18,7 +18,6 @@ public class Main {
                 exchange.getResponseHeaders().add("Content-Type", "text/event-stream");
                 exchange.getResponseHeaders().add("Cache-Control", "no-cache");
                 exchange.getResponseHeaders().add("Connection", "keep-alive");
-                exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
                 exchange.sendResponseHeaders(200, 0);
                 exchange.getResponseBody().write("retry: 5000\n\n".getBytes(Charset.forName("UTF-8")));
                 exchange.getResponseBody().flush();
@@ -63,7 +62,40 @@ public class Main {
         public static String escapeJson(String text) {
             if (text == null)
                 return "";
-            return text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "");
+            StringBuilder escaped = new StringBuilder(text.length());
+            for (int i = 0; i < text.length(); i++) {
+                char c = text.charAt(i);
+                switch (c) {
+                    case '"':
+                        escaped.append("\\\"");
+                        break;
+                    case '\\':
+                        escaped.append("\\\\");
+                        break;
+                    case '\b':
+                        escaped.append("\\b");
+                        break;
+                    case '\f':
+                        escaped.append("\\f");
+                        break;
+                    case '\n':
+                        escaped.append("\\n");
+                        break;
+                    case '\r':
+                        escaped.append("\\r");
+                        break;
+                    case '\t':
+                        escaped.append("\\t");
+                        break;
+                    default:
+                        if (c < 0x20) {
+                            escaped.append(String.format("\\u%04x", (int) c));
+                        } else {
+                            escaped.append(c);
+                        }
+                }
+            }
+            return escaped.toString();
         }
 
         public static void startHeartbeat() {
@@ -110,11 +142,7 @@ public class Main {
 
         public static final int MAX_RETRIES = 5;
         public static final int BASE_BACKOFF = 2;
-        public static final int CONCURRENT_FRAGMENTS = 5;
-
-        public static final boolean EMBED_METADATA = true;
-        public static final boolean EMBED_THUMBNAIL = true;
-        public static final boolean EMBED_SUBTITLES = true;
+        public static final int CONCURRENT_FRAGMENTS = 8;
 
         public static final String DEFAULT_VIDEO_EXT = "mp4";
         public static final String DEFAULT_AUDIO_EXT = "mp3";
@@ -127,6 +155,10 @@ public class Main {
         private static Integer cachedWidth = null;
         private static Boolean ansiSupported = null;
         private static Boolean unicodeSupported = null;
+
+        public static boolean supportsInteractiveTerminal() {
+            return System.console() != null;
+        }
 
         public static boolean supportsAnsi() {
             if (ansiSupported != null)
@@ -212,6 +244,11 @@ public class Main {
         public static int getTerminalWidth() {
             if (cachedWidth != null)
                 return cachedWidth;
+
+            if (!supportsInteractiveTerminal()) {
+                cachedWidth = 100;
+                return cachedWidth;
+            }
 
             String colEnv = System.getenv("COLUMNS");
             if (colEnv != null) {
@@ -348,6 +385,10 @@ public class Main {
 
         public synchronized void start(String message) {
             this.message = message;
+            if (!TerminalCapabilities.supportsInteractiveTerminal()) {
+                ConsoleRenderer.step(message);
+                return;
+            }
             if (running)
                 return;
             running = true;
@@ -447,6 +488,11 @@ public class Main {
                     + ConsoleRenderer.ANSI_YELLOW + stateStr + ConsoleRenderer.ANSI_BLUE + sizesStr
                     + ConsoleRenderer.ANSI_MAGENTA + fileStr + ConsoleRenderer.ANSI_RESET;
 
+            if (!TerminalCapabilities.supportsInteractiveTerminal()) {
+                ConsoleRenderer.println(output);
+                return;
+            }
+
             String newLine = (ConsoleRenderer.USE_ANSI ? ConsoleRenderer.ANSI_COLUMN_1 : "\r") + output;
 
             String plain = newLine.replaceAll("\033\\[[;\\d]*m", "");
@@ -462,6 +508,10 @@ public class Main {
             spinner.stop();
             if (!isRendering)
                 return;
+            if (!TerminalCapabilities.supportsInteractiveTerminal()) {
+                isRendering = false;
+                return;
+            }
             if (ConsoleRenderer.USE_ANSI) {
                 ConsoleRenderer.print(ConsoleRenderer.ANSI_COLUMN_1 + ConsoleRenderer.ANSI_CLEAR_LINE);
             } else {
@@ -495,9 +545,12 @@ public class Main {
     }
 
     public static class ProgressParser {
+        public static final String FINAL_PATH_PREFIX = "VIDFORGE_FINAL_PATH:";
         private static final Pattern PROGRESS_PATTERN = Pattern
                 .compile("\\[download\\]\\s+([\\d\\.]+%)\\s+of\\s+([^\\s]+)\\s+at\\s+([^\\s]+)\\s+ETA\\s+([\\d:]+)");
         private static final Pattern DEST_PATTERN = Pattern.compile("\\[download\\] Destination: (.*)");
+        private static final Pattern POSTPROCESS_DEST_PATTERN = Pattern
+                .compile("^\\[(?:ExtractAudio|VideoConvertor)\\] Destination: (.*)");
         private static final Pattern ALREADY_DOWNLOADED = Pattern
                 .compile("\\[download\\] (.*) has already been downloaded");
         private static final Pattern MERGE_PATTERN = Pattern.compile("\\[Merger\\] Merging formats into \"(.*)\"");
@@ -508,12 +561,24 @@ public class Main {
                 return;
 
             String downloadId = (stats != null && stats.downloadId != null) ? stats.downloadId : "";
+            if (stats != null && line.startsWith(FINAL_PATH_PREFIX)) {
+                try {
+                    Path reportedPath = Paths.get(line.substring(FINAL_PATH_PREFIX.length()).trim());
+                    if (reportedPath.isAbsolute()) {
+                        stats.lastKnownFilePath = reportedPath.toString();
+                        return;
+                    }
+                } catch (java.nio.file.InvalidPathException e) {
+                    logger.warning("Ignoring invalid final path reported by yt-dlp: " + e.getMessage());
+                }
+            }
 
             if (line.startsWith("[download]")) {
                 Matcher destM = DEST_PATTERN.matcher(line);
                 if (destM.find()) {
                     renderer.clear();
                     String fullPath = destM.group(1).trim();
+                    stats.lastKnownFilePath = fullPath;
                     model.currentFile = Paths.get(fullPath).getFileName().toString();
 
                     if (fullPath.endsWith(".m4a") || fullPath.endsWith(".webm") || fullPath.endsWith(".mp3")
@@ -607,6 +672,10 @@ public class Main {
             } else if (line.startsWith("[ThumbnailsConvertor]")) {
                 renderer.startPhase("Processing thumbnails...");
             } else if (line.startsWith("[ExtractAudio]") || line.startsWith("[VideoConvertor]")) {
+                Matcher destM = POSTPROCESS_DEST_PATTERN.matcher(line);
+                if (destM.find()) {
+                    stats.lastKnownFilePath = destM.group(1).trim();
+                }
                 renderer.startPhase("Converting formats...");
             } else if (line.toLowerCase().contains("error")) {
                 renderer.clear();
@@ -704,6 +773,7 @@ public class Main {
         }
     }
 
+    private static volatile boolean dependenciesValidated;
     private static final Logger logger = Logger.getLogger("yt_downloader");
 
     static {
@@ -718,23 +788,43 @@ public class Main {
         }
     }
 
-    public static void validateDependencies() {
+    public static synchronized void validateDependencies() {
+        if (dependenciesValidated) {
+            return;
+        }
         if (!isCommandAvailable("yt-dlp")) {
-            ConsoleRenderer.error("yt-dlp is not installed or not in PATH.");
-            System.exit(1);
+            throw new DownloaderException("yt-dlp is not installed or not in PATH.");
         }
         if (!isCommandAvailable("ffmpeg")) {
             throw new FFmpegMissingError(
                     "FFmpeg is not installed or not in PATH. It is required for merging and converting.");
         }
+        dependenciesValidated = true;
     }
 
     private static boolean isCommandAvailable(String command) {
+        Process process = null;
         try {
             String arg = command.equals("ffmpeg") ? "-version" : "--version";
-            Process p = new ProcessBuilder(command, arg).start();
-            return p.waitFor() == 0;
-        } catch (Exception e) {
+            process = new ProcessBuilder(command, arg)
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .start();
+            if (!process.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                logger.warning("Timed out while checking whether " + command + " is available.");
+                return false;
+            }
+            return process.exitValue() == 0;
+        } catch (IOException e) {
+            logger.log(Level.WARNING, "Could not check whether " + command + " is available.", e);
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            if (process != null) {
+                process.destroyForcibly();
+            }
+            logger.log(Level.WARNING, "Interrupted while checking whether " + command + " is available.", e);
             return false;
         }
     }
@@ -771,6 +861,9 @@ public class Main {
         }
 
         private boolean requiresAuthentication(String errorMsg) {
+            if (errorMsg == null) {
+                return false;
+            }
             String lower = errorMsg.toLowerCase();
             return lower.contains("sign in") || lower.contains("age-restricted") ||
                     lower.contains("private video") || lower.contains("members-only") ||
@@ -778,11 +871,18 @@ public class Main {
         }
 
         public Map<String, String> getMetadata(String url) {
+            return getMetadata(url, null, null);
+        }
+
+        public Map<String, String> getMetadata(String url, CancellationToken token, DownloadSession session) {
             ConsoleRenderer.step("Extracting video information...");
 
             try {
-                return executeDumpJson(url, null);
+                return executeDumpJson(url, null, token, session);
             } catch (Exception e) {
+                if (token != null) {
+                    token.throwIfCancelled();
+                }
                 if (!requiresAuthentication(e.getMessage())) {
                     throw new ExtractionError("Video unavailable: " + e.getMessage());
                 }
@@ -790,12 +890,19 @@ public class Main {
 
             ConsoleRenderer.warning("Authentication required. Attempting to use browser cookies...");
             for (String browser : Config.BROWSERS_TO_TRY) {
+                if (token != null) {
+                    token.throwIfCancelled();
+                }
                 ConsoleRenderer.step("Attempting to use " + browser + " cookies...");
                 try {
-                    Map<String, String> info = executeDumpJson(url, browser);
+                    Map<String, String> info = executeDumpJson(url, browser, token, session);
+                    info.put("_cookies_browser", browser);
                     ConsoleRenderer.success("Successfully loaded cookies from " + browser);
                     return info;
                 } catch (Exception e) {
+                    if (token != null) {
+                        token.throwIfCancelled();
+                    }
                     logger.warning("Failed with " + browser + ": " + e.getMessage());
                     if (!requiresAuthentication(e.getMessage())) {
                         throw new ExtractionError("Failed to extract info: " + e.getMessage());
@@ -808,9 +915,20 @@ public class Main {
             throw new ExtractionError("Authentication required and no cookies available.");
         }
 
-        private Map<String, String> executeDumpJson(String url, String browser)
+        private Map<String, String> executeDumpJson(String url, String browser, CancellationToken token,
+                DownloadSession session)
                 throws IOException, InterruptedException {
-            List<String> cmd = new ArrayList<>(Arrays.asList("yt-dlp", "--dump-json", "--no-playlist"));
+            if (token != null) {
+                token.throwIfCancelled();
+            }
+            List<String> cmd = new ArrayList<>(Arrays.asList(
+                    "yt-dlp",
+                    "--dump-json",
+                    "--no-playlist",
+                    "--no-warnings",
+                    "--no-check-formats",
+                    "--socket-timeout", "20",
+                    "--extractor-retries", "3"));
             if (browser != null) {
                 cmd.add("--cookies-from-browser");
                 cmd.add(browser);
@@ -818,43 +936,124 @@ public class Main {
             cmd.add(url);
 
             ProcessBuilder pb = new ProcessBuilder(cmd);
+            pb.redirectErrorStream(true);
             Process p = pb.start();
-
-            BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream(), "UTF-8"));
-            BufferedReader errorReader = new BufferedReader(new InputStreamReader(p.getErrorStream(), "UTF-8"));
-
-            String jsonOutput = reader.readLine();
-            StringBuilder errors = new StringBuilder();
-            String line;
-            while ((line = errorReader.readLine()) != null)
-                errors.append(line).append("\n");
-
-            int exitCode = p.waitFor();
-            if (exitCode != 0 || jsonOutput == null) {
-                throw new IOException(errors.toString().trim());
+            if (session != null) {
+                session.setProcess(p);
             }
 
-            Map<String, String> metadata = new HashMap<>();
-            metadata.put("id", extractJsonString(jsonOutput, "id"));
-            metadata.put("thumbnail", extractJsonString(jsonOutput, "thumbnail"));
-            metadata.put("title", extractJsonString(jsonOutput, "title"));
-            metadata.put("uploader", extractJsonString(jsonOutput, "uploader"));
-            metadata.put("duration", extractJsonNumber(jsonOutput, "duration"));
-            metadata.put("view_count", extractJsonNumber(jsonOutput, "view_count"));
-            metadata.put("height", extractJsonNumber(jsonOutput, "height"));
-            metadata.put("acodec", extractJsonString(jsonOutput, "acodec"));
-            metadata.put("vcodec", extractJsonString(jsonOutput, "vcodec"));
-            metadata.put("ext", extractJsonString(jsonOutput, "ext"));
-            metadata.put("format_note", extractJsonString(jsonOutput, "format_note"));
-            metadata.put("raw_json", jsonOutput);
-            metadata.put("is_playlist", jsonOutput.contains("\"_type\": \"playlist\"") ? "true" : "false");
+            try {
+                if (token != null) {
+                    token.throwIfCancelled();
+                }
+                String jsonOutput = null;
+                StringBuilder output = new StringBuilder();
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(p.getInputStream(), "UTF-8"))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (token != null) {
+                            token.throwIfCancelled();
+                        }
+                        if (jsonOutput == null && line.startsWith("{")) {
+                            jsonOutput = line;
+                        }
+                        output.append(line).append('\n');
+                    }
+                }
 
-            return metadata;
+                int exitCode = p.waitFor();
+                if (token != null) {
+                    token.throwIfCancelled();
+                }
+                if (exitCode != 0 || jsonOutput == null) {
+                    throw new IOException(output.toString().trim());
+                }
+
+                Map<String, String> metadata = new HashMap<>();
+                metadata.put("id", extractJsonString(jsonOutput, "id"));
+                metadata.put("thumbnail", extractJsonString(jsonOutput, "thumbnail"));
+                metadata.put("title", extractJsonString(jsonOutput, "title"));
+                metadata.put("uploader", extractJsonString(jsonOutput, "uploader"));
+                metadata.put("duration", extractJsonNumber(jsonOutput, "duration"));
+                metadata.put("view_count", extractJsonNumber(jsonOutput, "view_count"));
+                metadata.put("height", extractJsonNumber(jsonOutput, "height"));
+                metadata.put("acodec", extractJsonString(jsonOutput, "acodec"));
+                metadata.put("vcodec", extractJsonString(jsonOutput, "vcodec"));
+                metadata.put("ext", extractJsonString(jsonOutput, "ext"));
+                metadata.put("format_note", extractJsonString(jsonOutput, "format_note"));
+                metadata.put("raw_json", jsonOutput);
+                metadata.put("is_playlist", jsonOutput.contains("\"_type\": \"playlist\"") ? "true" : "false");
+
+                return metadata;
+            } finally {
+                if (p.isAlive()) {
+                    p.destroyForcibly();
+                }
+                if (session != null) {
+                    session.setProcess(null);
+                }
+            }
         }
 
         private String extractJsonString(String json, String key) {
-            Matcher m = Pattern.compile("\"" + key + "\":\\s*\"(.*?)\"").matcher(json);
-            return m.find() ? m.group(1).replace("\\\"", "\"") : "Unknown";
+            Matcher m = Pattern
+                    .compile("\"" + Pattern.quote(key) + "\":\\s*\"((?:\\\\.|[^\"\\\\])*)\"").matcher(json);
+            return m.find() ? unescapeJsonString(m.group(1)) : "Unknown";
+        }
+
+        private String unescapeJsonString(String value) {
+            StringBuilder result = new StringBuilder(value.length());
+            for (int i = 0; i < value.length(); i++) {
+                char c = value.charAt(i);
+                if (c != '\\') {
+                    result.append(c);
+                    continue;
+                }
+                if (++i >= value.length()) {
+                    throw new IllegalArgumentException("Invalid JSON string escape");
+                }
+                switch (value.charAt(i)) {
+                    case '"':
+                        result.append('"');
+                        break;
+                    case '\\':
+                        result.append('\\');
+                        break;
+                    case '/':
+                        result.append('/');
+                        break;
+                    case 'b':
+                        result.append('\b');
+                        break;
+                    case 'f':
+                        result.append('\f');
+                        break;
+                    case 'n':
+                        result.append('\n');
+                        break;
+                    case 'r':
+                        result.append('\r');
+                        break;
+                    case 't':
+                        result.append('\t');
+                        break;
+                    case 'u':
+                        if (i + 4 >= value.length()) {
+                            throw new IllegalArgumentException("Invalid JSON unicode escape");
+                        }
+                        try {
+                            result.append((char) Integer.parseInt(value.substring(i + 1, i + 5), 16));
+                        } catch (NumberFormatException e) {
+                            throw new IllegalArgumentException("Invalid JSON unicode escape", e);
+                        }
+                        i += 4;
+                        break;
+                    default:
+                        throw new IllegalArgumentException("Invalid JSON string escape");
+                }
+            }
+            return result.toString();
         }
 
         private String extractJsonNumber(String json, String key) {
@@ -868,7 +1067,8 @@ public class Main {
         ConsoleRenderer.printBanner();
         ConsoleRenderer.step("Initializing backend HTTP server on port 8080...");
 
-        HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
+        HttpServer server = HttpServer.create(
+                new InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), 8080), 0);
 
         DownloadController controller = new DownloadController();
         controller.registerRoutes(server);

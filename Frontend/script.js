@@ -8,33 +8,45 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!toastContainer) return;
 
     const toast = document.createElement("div");
-    toast.className = `toast`;
+    toast.className = "toast";
 
     let iconName = "info";
     if (type === "success") iconName = "check-circle";
     if (type === "error") iconName = "alert-triangle";
     if (type === "warning") iconName = "alert-circle";
 
+    const icon = document.createElement("div");
+    icon.className = `toast-icon ${type}`;
+    const iconElement = document.createElement("i");
+    iconElement.setAttribute("data-lucide", iconName);
+    icon.appendChild(iconElement);
+
+    const content = document.createElement("div");
+    content.className = "toast-content";
+    const title = document.createElement("div");
+    title.className = "toast-title";
+    title.textContent = titleText;
+    const message = document.createElement("div");
+    message.className = "toast-message";
+    message.textContent = messageText;
+    content.append(title, message);
+
+    const closeButton = document.createElement("button");
+    closeButton.className = "toast-close";
+    closeButton.setAttribute("aria-label", "Close Notification");
+    const closeIcon = document.createElement("i");
+    closeIcon.setAttribute("data-lucide", "x");
+    closeButton.appendChild(closeIcon);
+
     const isDownloadStarted =
       titleText.toLowerCase().includes("download started") ||
       type === "download-started";
-    const progressBarHtml = isDownloadStarted
-      ? `<div class="toast-progress-bar"></div>`
-      : "";
-
-    toast.innerHTML = `
-      <div class="toast-icon ${type}">
-        <i data-lucide="${iconName}"></i>
-      </div>
-      <div class="toast-content">
-        <div class="toast-title">${titleText}</div>
-        <div class="toast-message">${messageText}</div>
-      </div>
-      <button class="toast-close" aria-label="Close Notification">
-        <i data-lucide="x"></i>
-      </button>
-      ${progressBarHtml}
-    `;
+    toast.append(icon, content, closeButton);
+    if (isDownloadStarted) {
+      const progressBar = document.createElement("div");
+      progressBar.className = "toast-progress-bar";
+      toast.appendChild(progressBar);
+    }
 
     toastContainer.appendChild(toast);
     if (typeof lucide !== "undefined") {
@@ -57,10 +69,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
-    const closeBtn = toast.querySelector(".toast-close");
-    if (closeBtn) {
-      closeBtn.addEventListener("click", dismiss);
-    }
+    closeButton.addEventListener("click", dismiss);
   }
 
   const themeToggleBtn = document.getElementById("themeToggleBtn");
@@ -70,31 +79,16 @@ document.addEventListener("DOMContentLoaded", () => {
   htmlElement.setAttribute("data-theme", savedTheme);
 
   themeToggleBtn.addEventListener("click", () => {
-    htmlElement.classList.add("theme-transitioning");
-
     const currentTheme = htmlElement.getAttribute("data-theme");
     const newTheme = currentTheme === "dark" ? "light" : "dark";
 
     htmlElement.setAttribute("data-theme", newTheme);
     localStorage.setItem("yt-downloader-theme", newTheme);
-    themeToggleBtn.style.transform = "scale(0.9)";
-
-    setTimeout(() => {
-      themeToggleBtn.style.transform = "scale(1)";
-    }, 150);
-
-    setTimeout(() => {
-      htmlElement.classList.remove("theme-transitioning");
-    }, 450);
   });
 
   const isDesktop = window.matchMedia(
     "(hover: hover) and (pointer: fine)",
   ).matches;
-  const prefersReducedMotion = window.matchMedia(
-    "(prefers-reduced-motion: reduce)",
-  ).matches;
-
   const navbar = document.getElementById("mainNavbar");
   const navIndicator = document.getElementById("navIndicator");
   const navMenu = document.getElementById("navMenu");
@@ -118,21 +112,28 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    const activeRect = activeLink.getBoundingClientRect();
-    const menuRect = navMenu.getBoundingClientRect();
-    if (!activeRect || !menuRect) {
+    if (!activeLink.offsetWidth || !activeLink.offsetHeight) {
       navIndicator.style.opacity = "0";
       return;
     }
 
-    const left = Math.round(activeRect.left - menuRect.left);
-    const top = Math.round(activeRect.top - menuRect.top);
-    const width = Math.round(activeRect.width);
-    const height = Math.round(activeRect.height);
+    let left = 0;
+    let top = 0;
+    let offsetElement = activeLink;
+    while (offsetElement && offsetElement !== navMenu) {
+      left += offsetElement.offsetLeft;
+      top += offsetElement.offsetTop;
+      offsetElement = offsetElement.offsetParent;
+    }
+    if (offsetElement !== navMenu) {
+      navIndicator.style.opacity = "0";
+      return;
+    }
 
-    navIndicator.style.transform = `translate3d(${left}px, ${top}px, 0)`;
-    navIndicator.style.width = `${width}px`;
-    navIndicator.style.height = `${height}px`;
+    navIndicator.style.transform =
+      `translate3d(${left}px, ${top}px, 0)`;
+    navIndicator.style.width = `${activeLink.offsetWidth}px`;
+    navIndicator.style.height = `${activeLink.offsetHeight}px`;
     navIndicator.style.opacity = "1";
   }
 
@@ -145,14 +146,10 @@ document.addEventListener("DOMContentLoaded", () => {
       navbar.classList.remove("scrolled");
     }
 
-    if (isNavigating) {
-      navbar.classList.remove("hidden-scroll");
-    } else {
-      if (currentScrollY > lastScrollY && currentScrollY > 120) {
-        navbar.classList.add("hidden-scroll");
-      } else {
-        navbar.classList.remove("hidden-scroll");
-      }
+    if (currentScrollY <= 30 || currentScrollY < lastScrollY) {
+      navbar.classList.remove("scrolling-down");
+    } else if (currentScrollY > lastScrollY) {
+      navbar.classList.add("scrolling-down");
     }
     lastScrollY = currentScrollY;
 
@@ -167,26 +164,9 @@ document.addEventListener("DOMContentLoaded", () => {
       progressBar.style.width = scrolled + "%";
     }
 
+    updateNavIndicator();
     scrollTicking = false;
   }
-
-  let hoverRevealTimeout = null;
-  document.addEventListener("mousemove", (e) => {
-    try {
-      if (!navbar) return;
-      if (e.clientY <= 80) {
-        navbar.classList.remove("hidden-scroll");
-        if (hoverRevealTimeout) clearTimeout(hoverRevealTimeout);
-      } else {
-        if (window.scrollY > lastScrollY && window.scrollY > 120) {
-          if (hoverRevealTimeout) clearTimeout(hoverRevealTimeout);
-          hoverRevealTimeout = setTimeout(() => {
-            if (!isNavigating) navbar.classList.add("hidden-scroll");
-          }, 800);
-        }
-      }
-    } catch (err) {}
-  });
 
   window.addEventListener(
     "scroll",
@@ -199,10 +179,10 @@ document.addEventListener("DOMContentLoaded", () => {
     { passive: true },
   );
 
-  setTimeout(() => {
+  window.requestAnimationFrame(() => {
     handleScroll();
     updateNavIndicator();
-  }, 100);
+  });
 
   const spySections = [
     "home",
@@ -407,7 +387,6 @@ document.addEventListener("DOMContentLoaded", () => {
     link.addEventListener("click", (e) => {
       e.preventDefault();
       isNavigating = true;
-      if (navbar) navbar.classList.remove("hidden-scroll");
       clearTimeout(navigationTimeout);
       navigationTimeout = setTimeout(() => {
         isNavigating = false;
@@ -472,9 +451,6 @@ document.addEventListener("DOMContentLoaded", () => {
     mobileNavLinks.forEach((link) => {
       link.addEventListener("click", () => {
         isNavigating = true;
-        if (navbar) {
-          navbar.classList.remove("hidden-scroll");
-        }
         clearTimeout(navigationTimeout);
         navigationTimeout = setTimeout(() => {
           isNavigating = false;
@@ -507,19 +483,15 @@ document.addEventListener("DOMContentLoaded", () => {
   let simulationUrlInput = document.getElementById("simulationUrlInput");
   let simDownloadMode = document.getElementById("simDownloadMode");
   let simProcessPanel = document.getElementById("simProcessPanel");
-  let downloadMetadataToggle = document.getElementById(
-    "downloadMetadataToggle",
-  );
-  let downloadThumbnailToggle = document.getElementById(
-    "downloadThumbnailToggle",
-  );
-  let downloadSubtitlesToggle = document.getElementById(
-    "downloadSubtitlesToggle",
-  );
-  let downloadCookiesSelect = document.getElementById("downloadCookiesSelect");
   let downloadOutputFolderInput = document.getElementById(
     "downloadOutputFolderInput",
   );
+  const chooseOutputFolderBtn = document.getElementById("chooseOutputFolderBtn");
+  let outputFolderPickerPending = false;
+  let selectedOutputDirectory = null;
+  const outputDirectoriesByDownload = new Map();
+  let pendingOutputDirectoryReady = null;
+  let resolvePendingOutputDirectoryReady = null;
 
   let simVideoTitle = document.getElementById("simVideoTitle");
   let simVideoChannel = document.getElementById("simVideoChannel");
@@ -547,17 +519,6 @@ document.addEventListener("DOMContentLoaded", () => {
       simDownloadMode || document.getElementById("simDownloadMode");
     simProcessPanel =
       simProcessPanel || document.getElementById("simProcessPanel");
-    downloadMetadataToggle =
-      downloadMetadataToggle ||
-      document.getElementById("downloadMetadataToggle");
-    downloadThumbnailToggle =
-      downloadThumbnailToggle ||
-      document.getElementById("downloadThumbnailToggle");
-    downloadSubtitlesToggle =
-      downloadSubtitlesToggle ||
-      document.getElementById("downloadSubtitlesToggle");
-    downloadCookiesSelect =
-      downloadCookiesSelect || document.getElementById("downloadCookiesSelect");
     downloadOutputFolderInput =
       downloadOutputFolderInput ||
       document.getElementById("downloadOutputFolderInput");
@@ -590,21 +551,20 @@ document.addEventListener("DOMContentLoaded", () => {
       simProgressResolution || document.getElementById("simProgressResolution");
     simTickerText = simTickerText || document.getElementById("simTickerText");
 
-    simulationTerminal =
-      simulationTerminal || document.getElementById("simulationTerminal");
-    simQueueTableBody =
-      simQueueTableBody || document.getElementById("simQueueTableBody");
     downloadHistoryList =
       downloadHistoryList || document.getElementById("downloadHistoryList");
   }
 
   let isSimulatorRunning = false;
+  let isDownloadRequestPending = false;
   let currentDownloadId = null;
+  let lastFinishedDownloadId = null;
   let eventSource = null;
 
   function resetDownloadUI() {
     refreshElements();
     isSimulatorRunning = false;
+    isDownloadRequestPending = false;
     currentDownloadId = null;
     if (startSimBtn) {
       startSimBtn.disabled = false;
@@ -636,18 +596,41 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!downloadHistoryList) return;
     const item = document.createElement("div");
     item.className = "rcs-item";
-    item.innerHTML = `
-      <div class="rcs-thumb">
-        <img src="${entry.thumbnail || ""}" alt="${entry.title || "Download"}" onerror="this.style.display='none'" />
-      </div>
-      <div class="rcs-info">
-        <div class="rcs-name">${entry.title || "Unknown"}</div>
-        <div class="rcs-meta">
-          <span class="rcs-format-badge">${entry.format || "Unknown"}</span>
-          <span class="rcs-time">${entry.date || "Unknown date"}</span>
-        </div>
-      </div>
-    `;
+    const thumbnail = document.createElement("div");
+    thumbnail.className = "rcs-thumb";
+    if (entry.thumbnail) {
+      try {
+        const thumbnailUrl = new URL(entry.thumbnail, document.baseURI);
+        if (["http:", "https:"].includes(thumbnailUrl.protocol)) {
+          const image = document.createElement("img");
+          image.src = thumbnailUrl.href;
+          image.alt = entry.title || "Download";
+          image.addEventListener("error", () => {
+            image.style.display = "none";
+          });
+          thumbnail.appendChild(image);
+        }
+      } catch (error) {
+        console.warn("Ignoring invalid download thumbnail URL.", error);
+      }
+    }
+
+    const info = document.createElement("div");
+    info.className = "rcs-info";
+    const name = document.createElement("div");
+    name.className = "rcs-name";
+    name.textContent = entry.title || "Unknown";
+    const metadata = document.createElement("div");
+    metadata.className = "rcs-meta";
+    const format = document.createElement("span");
+    format.className = "rcs-format-badge";
+    format.textContent = entry.format || "Unknown";
+    const date = document.createElement("span");
+    date.className = "rcs-time";
+    date.textContent = entry.date || "Unknown date";
+    metadata.append(format, date);
+    info.append(name, metadata);
+    item.append(thumbnail, info);
     downloadHistoryList.prepend(item);
   }
 
@@ -665,9 +648,15 @@ document.addEventListener("DOMContentLoaded", () => {
     eventSource.addEventListener("DOWNLOAD_STARTED", (e) => {
       try {
         const data = JSON.parse(e.data);
-        if (data.downloadId) currentDownloadId = data.downloadId;
-      } catch (err) {}
+        if (data.downloadId) {
+          currentDownloadId = data.downloadId;
+          lastFinishedDownloadId = null;
+        }
+      } catch (err) {
+        console.error("Failed to process DOWNLOAD_STARTED event.", err);
+      }
 
+      isDownloadRequestPending = false;
       isSimulatorRunning = true;
       if (startSimBtn) {
         startSimBtn.disabled = false;
@@ -776,7 +765,7 @@ document.addEventListener("DOMContentLoaded", () => {
         showToast(
           "Metadata Ready",
           `Video information fetched for "${data.title}"`,
-          "info",
+          "success",
         );
       } catch (err) {
         console.error(err);
@@ -871,7 +860,9 @@ document.addEventListener("DOMContentLoaded", () => {
           if (simTickerText)
             simTickerText.textContent = "Current File: " + data.currentFile;
         });
-      } catch (err) {}
+      } catch (err) {
+        console.error("Failed to process PROGRESS event.", err);
+      }
     });
 
     eventSource.addEventListener("STATUS", (e) => {
@@ -885,7 +876,13 @@ document.addEventListener("DOMContentLoaded", () => {
         ) {
           return;
         }
-      } catch (err) {}
+        const statusMessage = data.message || data.status;
+        if (statusMessage && simTickerText) {
+          simTickerText.textContent = statusMessage;
+        }
+      } catch (err) {
+        console.error("Failed to process STATUS event.", err);
+      }
     });
 
     eventSource.addEventListener("WARNING", (e) => {
@@ -899,7 +896,13 @@ document.addEventListener("DOMContentLoaded", () => {
         ) {
           return;
         }
-      } catch (err) {}
+        const warningMessage = data.message || data.warning;
+        if (warningMessage && simTickerText) {
+          simTickerText.textContent = warningMessage;
+        }
+      } catch (err) {
+        console.error("Failed to process WARNING event.", err);
+      }
     });
 
     eventSource.addEventListener("ERROR", (e) => {
@@ -915,12 +918,18 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         showToast("Error", data.message, "error");
-      } catch (err) {}
+      } catch (err) {
+        console.error("Failed to process ERROR event.", err);
+      }
     });
 
-    eventSource.addEventListener("DOWNLOAD_COMPLETE", (e) => {
+    eventSource.addEventListener("DOWNLOAD_COMPLETE", async (e) => {
       try {
         const data = JSON.parse(e.data || "{}");
+
+        if (isDownloadRequestPending && pendingOutputDirectoryReady) {
+          await pendingOutputDirectoryReady;
+        }
 
         if (
           currentDownloadId &&
@@ -930,6 +939,72 @@ document.addEventListener("DOMContentLoaded", () => {
           return;
         }
 
+        const outputDirectory = outputDirectoriesByDownload.get(data.downloadId);
+        if (outputDirectory) {
+          try {
+            const response = await fetch(
+              "/api/download-file?id=" + encodeURIComponent(data.downloadId),
+            );
+            if (!response.ok) {
+              const errorBody = await response.json();
+              throw new Error(
+                errorBody.error || "The completed file could not be transferred.",
+              );
+            }
+
+            const fileName = (data.path || "download").split(/[\\/]/).pop();
+            if (typeof outputDirectory.getFileHandle !== "function") {
+              throw new Error(
+                "This browser cannot create files in the selected folder.",
+              );
+            }
+            const fileHandle = await outputDirectory.getFileHandle(fileName, {
+              create: true,
+            });
+            if (typeof fileHandle.createWritable !== "function") {
+              throw new Error(
+                "This browser cannot write files to the selected folder.",
+              );
+            }
+            const writable = await fileHandle.createWritable();
+            try {
+              if (response.body && typeof response.body.pipeTo === "function") {
+                await response.body.pipeTo(writable);
+              } else {
+                await writable.write(await response.blob());
+                await writable.close();
+              }
+            } catch (error) {
+              await writable.abort();
+              throw error;
+            }
+
+            data.path = outputDirectory.name + "/" + fileName;
+            const cleanupResponse = await fetch("/api/download-file/cleanup", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ downloadId: data.downloadId }),
+            });
+            if (!cleanupResponse.ok) {
+              showToast(
+                "Saved with a copy in Downloads",
+                "The file was saved to the selected folder, but the temporary copy could not be removed.",
+                "warning",
+              );
+            }
+          } catch (error) {
+            showToast(
+              "Saved to Downloads",
+              "The selected folder could not be written to: " +
+                (error.message || "unknown error"),
+              "warning",
+            );
+          } finally {
+            outputDirectoriesByDownload.delete(data.downloadId);
+          }
+        }
+
+        lastFinishedDownloadId = data.downloadId || currentDownloadId;
         resetDownloadUI();
 
         renderHistoryEntry({
@@ -954,7 +1029,9 @@ document.addEventListener("DOMContentLoaded", () => {
             colors: ["#dc2626", "#ef4444", "#f87171", "#ffffff"],
           });
         }
-      } catch (err) {}
+      } catch (err) {
+        console.error("Failed to process DOWNLOAD_COMPLETE event.", err);
+      }
     });
 
     eventSource.addEventListener("DOWNLOAD_FAILED", (e) => {
@@ -969,10 +1046,14 @@ document.addEventListener("DOMContentLoaded", () => {
           return;
         }
 
+        lastFinishedDownloadId = data.downloadId || currentDownloadId;
+        outputDirectoriesByDownload.delete(data.downloadId);
         resetDownloadUI();
 
         showToast("Download Failed", data.message, "error");
-      } catch (err) {}
+      } catch (err) {
+        console.error("Failed to process DOWNLOAD_FAILED event.", err);
+      }
     });
   }
 
@@ -1034,6 +1115,54 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  async function chooseOutputFolder() {
+    if (outputFolderPickerPending) return;
+
+    outputFolderPickerPending = true;
+    if (chooseOutputFolderBtn) chooseOutputFolderBtn.disabled = true;
+    try {
+      if (typeof window.showDirectoryPicker !== "function") {
+        throw new Error(
+          "Folder selection is supported in Chromium-based browsers. You can also type a local folder path.",
+        );
+      }
+
+      const directory = await window.showDirectoryPicker({ mode: "readwrite" });
+      const permission = await directory.requestPermission({ mode: "readwrite" });
+      if (permission !== "granted") {
+        throw new Error("VidForge needs write access to the selected folder.");
+      }
+
+      selectedOutputDirectory = directory;
+      if (downloadOutputFolderInput) {
+        downloadOutputFolderInput.value = directory.name;
+        downloadOutputFolderInput.title =
+          "Selected folder: " + directory.name + " (the browser hides its full path)";
+      }
+    } catch (error) {
+      if (error.name === "AbortError") return;
+      showToast(
+        "Folder Selection Unavailable",
+        error.message || "Enter a local folder path manually.",
+        "warning",
+      );
+    } finally {
+      outputFolderPickerPending = false;
+      if (chooseOutputFolderBtn) chooseOutputFolderBtn.disabled = false;
+    }
+  }
+
+  if (chooseOutputFolderBtn) {
+    chooseOutputFolderBtn.addEventListener("click", chooseOutputFolder);
+  }
+  if (downloadOutputFolderInput) {
+    downloadOutputFolderInput.addEventListener("click", chooseOutputFolder);
+    downloadOutputFolderInput.addEventListener("input", () => {
+      selectedOutputDirectory = null;
+      downloadOutputFolderInput.removeAttribute("title");
+    });
+  }
+
   refreshElements();
   startSimBtn.addEventListener("click", () => {
     if (isSimulatorRunning) {
@@ -1046,22 +1175,30 @@ document.addEventListener("DOMContentLoaded", () => {
       if (currentDownloadId) {
         fetch("/api/download/cancel", {
           method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ downloadId: currentDownloadId }),
         })
-          .then((r) => r.json())
-          .then((res) => {
-            if (!res.success) {
-              showToast("Error", "Could not cancel download.", "error");
-              resetDownloadUI();
+          .then(async (response) => {
+            const res = await response.json();
+            if (!response.ok || !res.success) {
+              throw new Error(
+                res.message || res.error || "Could not cancel download.",
+              );
             }
           })
-          .catch((err) => {
-            showToast("Error", "Could not cancel download.", "error");
+          .catch((error) => {
+            showToast(
+              "Error",
+              error.message || "Could not cancel download.",
+              "error",
+            );
             resetDownloadUI();
           });
       }
       return;
     }
+
+    if (isDownloadRequestPending) return;
 
     const targetUrl = simulationUrlInput.value.trim();
     if (!targetUrl) {
@@ -1107,24 +1244,88 @@ document.addEventListener("DOMContentLoaded", () => {
         reqMode === "audio" ? "--" : "-- • --";
     }
 
+    const requestOutputDirectory = selectedOutputDirectory;
     const payload = {
       url: targetUrl,
       mode: reqMode,
       resolution: reqRes,
       audioFormat: reqAudio,
-      metadata: downloadMetadataToggle?.checked ?? true,
-      thumbnail: downloadThumbnailToggle?.checked ?? true,
-      subtitles: downloadSubtitlesToggle?.checked ?? true,
-      outputFolder: downloadOutputFolderInput?.value?.trim() || "",
-      cookies: downloadCookiesSelect?.value || "",
+      outputFolder: requestOutputDirectory
+        ? ""
+        : downloadOutputFolderInput?.value?.trim() || "",
+      browserFolderSelected: Boolean(requestOutputDirectory),
     };
+
+    isDownloadRequestPending = true;
+    pendingOutputDirectoryReady = new Promise((resolve) => {
+      resolvePendingOutputDirectoryReady = resolve;
+    });
+    lastFinishedDownloadId = null;
+    startSimBtn.disabled = true;
+    startSimBtn.style.opacity = "0.7";
+    startSimBtn.innerHTML =
+      '<i data-lucide="loader-2" class="spin-animation"></i> <span>Starting...</span>';
+    if (typeof lucide !== "undefined") lucide.createIcons();
 
     fetch("/api/download", {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
-    }).catch((err) => {
-      showToast("Error", "Could not reach backend.", "error");
-    });
+    })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(
+            data.error || data.message || "Could not start download.",
+          );
+        }
+        if (!data.downloadId) {
+          throw new Error("The backend did not return a download ID.");
+        }
+        if (lastFinishedDownloadId === data.downloadId) return;
+
+        currentDownloadId = data.downloadId;
+        if (requestOutputDirectory) {
+          outputDirectoriesByDownload.set(data.downloadId, requestOutputDirectory);
+        }
+        if (resolvePendingOutputDirectoryReady) {
+          resolvePendingOutputDirectoryReady();
+          resolvePendingOutputDirectoryReady = null;
+          pendingOutputDirectoryReady = null;
+        }
+        isDownloadRequestPending = false;
+        isSimulatorRunning = true;
+        startSimBtn.disabled = false;
+        startSimBtn.style.opacity = "1";
+        startSimBtn.classList.add("btn-danger");
+        startSimBtn.innerHTML =
+          '<i data-lucide="square"></i> <span>Stop Download</span>';
+        if (simProcessPanel) simProcessPanel.classList.remove("hidden");
+        if (typeof lucide !== "undefined") lucide.createIcons();
+      })
+      .catch((error) => {
+        if (resolvePendingOutputDirectoryReady) {
+          resolvePendingOutputDirectoryReady();
+          resolvePendingOutputDirectoryReady = null;
+          pendingOutputDirectoryReady = null;
+        }
+        if (!isDownloadRequestPending && isSimulatorRunning) {
+          showToast(
+            "Error",
+            error.message || "Could not confirm the download request.",
+            "error",
+          );
+          return;
+        }
+        if (!isDownloadRequestPending) return;
+
+        resetDownloadUI();
+        showToast(
+          "Error",
+          error.message || "Could not reach backend.",
+          "error",
+        );
+      });
   });
 
   const repoFileTreeItems = document.querySelectorAll(
@@ -1364,9 +1565,6 @@ document.addEventListener("DOMContentLoaded", () => {
             footer.classList.add("revealed");
           }
 
-          if (!footerStatsAnimated) {
-            footerStatsAnimated = true;
-          }
         }
       });
     },

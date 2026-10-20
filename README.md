@@ -4,7 +4,7 @@
 
 VidForge is a fast and reliable YouTube media downloader built with Java, yt-dlp, and FFmpeg.
 
-It provides a simple workflow for downloading YouTube videos or extracting audio while giving control over the desired format, quality, output location, metadata, thumbnails, and subtitles.
+It provides a simple workflow for downloading YouTube videos or extracting audio while giving control over the desired format, quality, and output location. Metadata and thumbnails are always embedded, and subtitles are downloaded and embedded for video.
 
 The application combines a Java-based download engine with a web interface to provide a streamlined media downloading experience.
 
@@ -15,7 +15,7 @@ VidForge is designed around a straightforward workflow:
 1. Provide a YouTube URL.
 2. Select the required download mode.
 3. Select the desired quality or audio format.
-4. Configure optional media settings.
+4. Start the download with metadata, thumbnails, and video subtitles enabled by default.
 5. Start the download.
 6. Monitor the download progress.
 7. Receive the completed media file in the configured output directory.
@@ -86,8 +86,12 @@ Active sessions are managed through a centralized session manager backed by a `C
 
 VidForge includes retry handling for failures that are considered recoverable, including connection failures, socket timeouts, unknown host errors, and certain network-related IO failures.
 
-When a retryable failure occurs, the downloader waits using an exponential backoff strategy before attempting the download again. The current configuration allows up to 5 attempts.
+Only known transient network failures are retried. Invalid or unavailable videos, unsupported formats, and other permanent failures stop immediately instead of waiting through unnecessary backoff. When a retryable failure occurs, the downloader waits using an exponential backoff strategy before attempting the download again. The current configuration allows up to 5 attempts. yt-dlp's final error is included in the terminal message and the browser failure event.
 If a download is cancelled or interrupted, VidForge also performs cleanup of incomplete download artifacts. The cleanup system detects files such as `.part`, `.temp`, `.ytdl`, and yt-dlp fragment files and removes them.
+
+## Startup and Progress Responsiveness
+
+Dependency checks run once per backend process, discard version-command output, and have a timeout so a stalled tool probe cannot block a download. yt-dlp skips redundant format-availability checks, uses bounded socket and retry settings, downloads segmented streams with up to 8 concurrent fragments, and limits progress updates to twice per second to reduce avoidable logging and event-stream overhead. In non-interactive terminals, progress and post-processing updates are printed as complete lines rather than overwritten in place.
 
 ## Live Progress and Status
 
@@ -175,15 +179,13 @@ The frontend provides the user-facing download interface, while the Java backend
 
 ## Current Output Configuration
 
-By default, VidForge stores downloaded audio and video files in separate directories under the user's Downloads directory:
+By default, VidForge stores downloaded audio and video files in the user's Downloads directory. In a Chromium-based browser, select **Browse** (or click the output-folder field) to choose a destination. The browser keeps the full path private; VidForge displays the folder name, transfers the completed file into the selected folder, and removes its temporary copy from Downloads. On browsers without the File System Access API, enter a local folder path manually.
 
 ```text
-Downloads/
-  YouTube_Audio/
-  YouTube_Video/
+~/Downloads/
 ```
 
-The application also supports specifying a custom output directory for individual download requests.
+If no folder is selected, downloads are saved directly to `~/Downloads`.
 
 ## Features
 
@@ -218,15 +220,13 @@ The requested audio format is passed through the download request and used to co
 
 ### Download Customization
 
-Each download request can include additional options such as:
+Each download request includes the selected output directory when configured. Media processing is automatic:
 
 * Metadata embedding
 * Thumbnail embedding
-* Subtitle embedding
-* Custom output directory
-* Browser cookies
+* Subtitle download and embedding for video
 
-These options are represented as part of the backend download request and are processed independently for each download.
+The backend also selects browser cookies automatically if authentication is required.
 
 ### Download Progress
 
@@ -384,7 +384,7 @@ The process begins when a YouTube URL is submitted through the frontend.
 
 The frontend collects the URL together with the selected download configuration and sends the request to the Java backend.
 
-The web interface is designed around a URL ingestion stage followed by metadata extraction and download option selection.
+The web interface is designed around a URL ingestion stage followed by metadata extraction and download format selection.
 
 ### 2. Request Processing
 
@@ -396,13 +396,9 @@ The request can contain:
 * Download mode
 * Video resolution
 * Audio format
-* Metadata option
-* Thumbnail option
-* Subtitle option
 * Output directory
-* Browser cookie configuration
 
-The backend validates the request before starting the download operation.
+Metadata, thumbnails, and video subtitles are enabled automatically. Browser cookies are selected by the backend only when authentication is required.
 
 ### 3. Download Session Creation
 
@@ -458,10 +454,9 @@ The process configuration can include:
 
 * Selected media format
 * Output template
-* Metadata options
-* Thumbnail options
-* Subtitle options
-* Browser cookie configuration
+* Metadata and thumbnail embedding
+* Subtitle downloading and embedding for video
+* Automatic browser cookies when authentication is required
 * Progress output
 
 The backend then monitors the process while it is running.
@@ -703,13 +698,9 @@ The request contains information such as:
 * Download mode
 * Video resolution
 * Audio format
-* Metadata preference
-* Thumbnail preference
-* Subtitle preference
 * Output directory
-* Browser cookie configuration
 
-This gives the download manager a structured representation of the user's requested operation rather than passing individual values throughout the application.
+Metadata, thumbnails, and video subtitles are always enabled. The backend selects browser cookies automatically when authentication is required.
 
 #### 5. Download Session Layer
 
@@ -881,7 +872,7 @@ This structure allows the individual parts of the downloader to evolve independe
 
 ## Download Pipeline
 
-VidForge processes each download through a sequence of stages handled by the Java backend. The pipeline combines request parsing, metadata extraction, session management, yt-dlp execution, progress parsing, optional media processing, retry handling, thumbnail processing, and cleanup.
+VidForge processes each download through a sequence of stages handled by the Java backend. The pipeline combines request parsing, metadata extraction, session management, yt-dlp execution, progress parsing, default media processing, retry handling, thumbnail processing, and cleanup.
 
 ### Pipeline Overview
 
@@ -952,11 +943,7 @@ The request contains the information required to configure the download:
 - Download mode
 - Video resolution
 - Audio format
-- Metadata option
-- Thumbnail option
-- Subtitle option
 - Output folder
-- Browser cookies
 ```
 
 `DownloadRequest.parseJson()` converts the incoming JSON into the corresponding Java objects and configuration values.
@@ -1046,7 +1033,7 @@ The implementation checks for authentication-related conditions such as:
 - Requires authentication
 ```
 
-When authentication is required, the downloader attempts browser cookies from the configured browser list:
+When metadata extraction requires authentication, the downloader tries the available browser cookie stores in sequence:
 
 ```text
 - Chrome
@@ -1135,16 +1122,12 @@ The current audio configuration uses the selected format with audio quality `0`.
 
 The output directory is selected from the request.
 
-If a custom output directory is supplied, VidForge uses it.
+If a custom output directory is supplied, VidForge creates it when needed and uses it.
 
 Otherwise, it uses the configured default directory:
 
 ```text
-Audio:
-Downloads/YouTube_Audio
-
-Video:
-Downloads/YouTube_Video
+~/Downloads
 ```
 
 The output filename is generated using the media title and YouTube ID, with a resolution suffix for video downloads when applicable.
@@ -1155,9 +1138,9 @@ Example structure:
 %(title)s_%(id)s_1080p.mp4
 ```
 
-### 13. Optional Media Processing
+### 13. Default Media Processing
 
-The command builder adds optional processing arguments according to the request.
+The command builder always embeds metadata and thumbnails. Video downloads also always download and embed subtitles.
 
 Metadata:
 
@@ -1180,7 +1163,7 @@ Subtitles for video:
 --compat-options no-live-chat
 ```
 
-These options are only added when the corresponding request settings are enabled.
+These flags are added automatically and are not configurable per download.
 
 ### 14. Concurrent Fragment Configuration
 
@@ -1189,14 +1172,15 @@ VidForge configures yt-dlp to process multiple fragments concurrently.
 The current configuration specifies:
 
 ```text
---concurrent-fragments 5
+--concurrent-fragments 8
 ```
 
 This value is defined centrally in `Main.Config.CONCURRENT_FRAGMENTS`.
+Progress output is explicitly enabled, emitted as newline-delimited records, and throttled with `--progress-delta 0.5` so the backend can parse it without flooding the terminal or event stream.
 
-### 15. Browser Cookies During Download
+### 15. Automatic Browser Cookies
 
-If browser cookie information is included in the request, VidForge adds:
+If metadata extraction requires authentication, VidForge automatically tries the configured browsers. When a browser succeeds, that browser's cookies are also used for the media download:
 
 ```text
 --cookies-from-browser <browser>
@@ -1287,7 +1271,7 @@ These stages are reflected in the backend renderer and status events.
 
 If yt-dlp exits unsuccessfully, VidForge determines whether the failure is retryable.
 
-The retry policy excludes user cancellation and interruption from retry processing. Network-related failures such as connection failures, socket timeouts, unknown host errors, and certain IO errors can be retried.
+The retry policy excludes user cancellation, interruption, and permanent extraction/download errors from retry processing. Known transient failures such as connection failures, socket timeouts, unknown host errors, HTTP 408/429/5xx responses, and interrupted reads can be retried. The last yt-dlp error line is preserved for the terminal and browser instead of being replaced by a generic exit-code message.
 
 The download manager currently allows up to 5 attempts and uses an exponential backoff based on a base value of 2.
 
@@ -1440,13 +1424,10 @@ VidForge/
 |
 +-- Frontend/
 |   |
+|   +-- favicon.svg
 |   +-- index.html
 |   +-- script.js
 |   +-- style.css
-|   +-- media_queries.css
-|   +-- cleanup.js
-|   +-- frontend_audit.js
-|   +-- verify_dead_code.js
 |
 +-- .gitignore
 +-- README.md
@@ -1465,13 +1446,14 @@ Before running VidForge, the required external dependencies must be available in
 * FFmpeg
 * A modern web browser
 
-The backend verifies the availability of yt-dlp and FFmpeg during initialization.
+The backend verifies the availability of yt-dlp and FFmpeg when a download request starts.
 
 ## Running the Backend
 
 From the `Backend` directory, compile the Java source files and start the application.
 
 The backend starts an HTTP server on port `8080` and registers the download controller routes.
+For safety, the server binds to the local loopback interface and is not directly accessible from other devices on the network.
 
 ```powershell
 cd Backend
@@ -1489,17 +1471,14 @@ http://localhost:8080
 
 ## Running the Frontend
 
-The frontend is a static HTML, CSS, and JavaScript interface.
-
-Open:
+The backend serves the frontend and API from the same origin. After starting
+the backend, open:
 
 ```text
-Frontend/index.html
+http://localhost:8080
 ```
 
-in a modern browser after starting the backend.
-
-The frontend communicates with the backend to submit download requests and receive live download events.
+The frontend communicates with the backend to submit YouTube download requests and receive live download events. Only HTTP(S) URLs hosted on YouTube domains are accepted.
 
 ## Configuration
 
@@ -1508,11 +1487,8 @@ Several backend defaults are defined in `Main.Config`.
 Current defaults include:
 
 ```text id="7q8m1c"
-Video output:
-~/Downloads/YouTube_Video
-
-Audio output:
-~/Downloads/YouTube_Audio
+Default output:
+~/Downloads
 
 Maximum retries:
 5
@@ -1521,7 +1497,7 @@ Retry backoff base:
 2
 
 Concurrent fragments:
-5
+8
 
 Default video extension:
 mp4

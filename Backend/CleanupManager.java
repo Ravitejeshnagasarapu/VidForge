@@ -11,8 +11,10 @@ public class CleanupManager {
     private static final Pattern FRAGMENT_PATTERN = Pattern.compile(".*\\.f\\d{2,4}\\.(mp4|m4a|webm)$");
 
     public static void cleanupPartialFiles() {
-        cleanDirectory(Main.Config.AUDIO_PATH);
-        cleanDirectory(Main.Config.VIDEO_PATH);
+        DownloadSessionManager.getInstance().runIfIdle(() -> {
+            cleanDirectory(Main.Config.AUDIO_PATH);
+            cleanDirectory(Main.Config.VIDEO_PATH);
+        });
     }
 
     private static void cleanDirectory(String dirPath) {

@@ -15,6 +15,8 @@
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
     />
 
     <link rel="stylesheet" href="/style.css" />
@@ -455,6 +457,19 @@
         transform: translateY(0);
       }
 
+      .vidforge-error-box-dismiss {
+        width: 100%;
+        margin-top: 8px;
+        padding: 8px 12px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.04);
+        color: rgba(255, 255, 255, 0.75);
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
       @media (max-width: 480px) {
         .vidforge-loader-error-box {
           left: 16px;
@@ -548,6 +563,13 @@
         >
           Reload Page
         </button>
+        <button
+          type="button"
+          class="vidforge-error-box-dismiss"
+          id="vidforgeErrorBoxDismiss"
+        >
+          Dismiss
+        </button>
       </div>
     </div>
 
@@ -566,25 +588,21 @@
         ];
 
         const progressWeights = {
-          dom: 20,
-          css: 20,
-          fonts: 20,
-          js: 20,
-          lucide: 20,
+          dom: 30,
+          css: 35,
+          js: 35,
         };
 
         const loadedStatus = {
           dom: false,
           css: false,
-          fonts: false,
           js: false,
-          lucide: false,
         };
 
         let currentProgress = 0;
         let targetProgress = 0;
         const startTime = Date.now();
-        const minDisplayTime = 1800;
+        const minDisplayTime = 1200;
 
         let currentMessageIndex = 0;
         const statusEl = document.getElementById("loader-status-message");
@@ -618,7 +636,9 @@
           list.innerHTML = "";
           loadErrors.forEach(function (err) {
             const li = document.createElement("li");
-            li.innerHTML = "<strong>" + err.label + ":</strong> " + err.detail;
+            const label = document.createElement("strong");
+            label.textContent = err.label + ":";
+            li.append(label, document.createTextNode(" " + err.detail));
             list.appendChild(li);
           });
 
@@ -640,6 +660,14 @@
         if (retryBtn) {
           retryBtn.addEventListener("click", function () {
             window.location.reload();
+          });
+        }
+
+        const dismissBtn = document.getElementById("vidforgeErrorBoxDismiss");
+        if (dismissBtn) {
+          dismissBtn.addEventListener("click", function () {
+            const box = document.getElementById("vidforgeLoaderErrorBox");
+            if (box) box.remove();
           });
         }
 
@@ -668,39 +696,14 @@
           animateProgressBar();
         };
 
-        let isAnimating = false;
         function animateProgressBar() {
-          if (isAnimating) return;
-          isAnimating = true;
-
-          function step() {
-            if (currentProgress < targetProgress) {
-              currentProgress += 1.5;
-              if (currentProgress > targetProgress) {
-                currentProgress = targetProgress;
-              }
-
-              const fillEl = document.getElementById("loader-progress-fill");
-              const percentEl = document.getElementById("loader-percentage");
-              const progressPercent = Math.min(
-                100,
-                Math.floor(currentProgress),
-              );
-
-              if (fillEl) fillEl.style.width = progressPercent + "%";
-              if (percentEl) percentEl.textContent = progressPercent + "%";
-
-              if (currentProgress < 100) {
-                requestAnimationFrame(step);
-              } else {
-                isAnimating = false;
-                triggerCompletion();
-              }
-            } else {
-              isAnimating = false;
-            }
-          }
-          requestAnimationFrame(step);
+          currentProgress = targetProgress;
+          const progressPercent = Math.min(100, Math.floor(currentProgress));
+          const fillEl = document.getElementById("loader-progress-fill");
+          const percentEl = document.getElementById("loader-percentage");
+          if (fillEl) fillEl.style.width = progressPercent + "%";
+          if (percentEl) percentEl.textContent = progressPercent + "%";
+          if (currentProgress >= 100) triggerCompletion();
         }
 
         let completionTriggered = false;
@@ -719,13 +722,12 @@
 
             if (hasLoadErrors) {
               if (statusMsg) {
-                statusMsg.textContent = "Some resources failed to load.";
+                statusMsg.textContent = "Continuing with limited resources.";
               }
               renderLoaderErrorBox();
-              return;
-            }
-
-            if (statusMsg) {
+              const errorBox = document.getElementById("vidforgeLoaderErrorBox");
+              if (errorBox) document.body.appendChild(errorBox);
+            } else if (statusMsg) {
               statusMsg.textContent = "Ready!";
             }
 
@@ -806,7 +808,7 @@
               );
             }
           }
-        }, 8000);
+        }, 4000);
       })();
     </script>
 
@@ -1123,11 +1125,13 @@
                             type="url"
                             id="simulationUrlInput"
                             class="app-url-input"
+                            aria-label="YouTube video, playlist, or channel URL"
                             placeholder="Paste YouTube Video, Playlist, or Channel URL..."
                           />
                           <button
                             id="detectClipboardBtn"
                             class="btn-clipboard-detect"
+                            aria-label="Paste URL from clipboard"
                             title="Paste from clipboard"
                           >
                             <i data-lucide="clipboard"></i>
@@ -1135,7 +1139,11 @@
                         </div>
 
                         <div class="config-select-group">
-                          <select id="simDownloadMode" class="app-select">
+                          <select
+                            id="simDownloadMode"
+                            class="app-select"
+                            aria-label="Download format"
+                          >
                             <option value="1">
                               Audio Only (Highest Quality MP3)
                             </option>
@@ -1165,60 +1173,30 @@
                       </div>
                     </div>
 
-                    <div
-                      class="download-configuration-grid toggles-grid"
-                      style="margin-top: 14px; margin-bottom: 14px"
-                    >
-                      <label class="config-checkbox-group">
-                        <input
-                          id="downloadMetadataToggle"
-                          type="checkbox"
-                          checked
-                        />
-                        <span class="custom-toggle"></span>
-                        <span>Metadata</span>
-                      </label>
-                      <label class="config-checkbox-group">
-                        <input
-                          id="downloadThumbnailToggle"
-                          type="checkbox"
-                          checked
-                        />
-                        <span class="custom-toggle"></span>
-                        <span>Thumbnail</span>
-                      </label>
-                      <label class="config-checkbox-group">
-                        <input
-                          id="downloadSubtitlesToggle"
-                          type="checkbox"
-                          checked
-                        />
-                        <span class="custom-toggle"></span>
-                        <span>Subtitles</span>
-                      </label>
-                    </div>
-
                     <div class="download-configuration-grid configs-grid">
-                      <label class="config-select-group">
-                        <span class="config-label">Cookies</span>
-                        <select id="downloadCookiesSelect" class="app-select">
-                          <option value="">Automatic</option>
-                          <option value="chrome">Chrome</option>
-                          <option value="edge">Edge</option>
-                          <option value="firefox">Firefox</option>
-                          <option value="brave">Brave</option>
-                        </select>
-                      </label>
-                      <label class="config-select-group">
-                        <span class="config-label">Output folder</span>
-                        <input
-                          id="downloadOutputFolderInput"
-                          class="app-url-input"
-                          type="text"
-                          placeholder="Leave blank for default Downloads folder"
-                          aria-label="Download output folder"
-                        />
-                      </label>
+                      <div class="config-select-group output-folder-group">
+                        <label class="config-label" for="downloadOutputFolderInput">Output folder</label>
+                        <div class="output-folder-picker">
+                          <input
+                            id="downloadOutputFolderInput"
+                            class="app-url-input"
+                            type="text"
+                            placeholder="Default: Downloads"
+                            aria-label="Download output folder"
+                            autocomplete="off"
+                          />
+                          <button
+                            id="chooseOutputFolderBtn"
+                            class="btn btn-secondary"
+                            type="button"
+                            aria-label="Choose output folder"
+                            title="Choose output folder"
+                          >
+                            <i data-lucide="folder-open" aria-hidden="true"></i>
+                            <span>Browse</span>
+                          </button>
+                        </div>
+                      </div>
                     </div>
                     <div class="sim-process-panel hidden" id="simProcessPanel">
                       <div class="sim-unified-card">
@@ -2101,9 +2079,10 @@ public class Main {
             <pre
               class="install-pre"
             ><code id="installCommand">git clone https://github.com/Ravitejeshnagasarapu/VidForge
-cd VidForge
-javac test.java
-java test</code></pre>
+cd VidForge\Backend
+javac -d ..\bin *.java
+cd ..
+java -cp bin Main</code></pre>
           </div>
 
           <div class="download-buttons-group">
@@ -2281,7 +2260,10 @@ java test</code></pre>
         "https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.js",
       ]);
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script
+      async
+      src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"
+    ></script>
     <script
       src="/script.js"
       onerror="

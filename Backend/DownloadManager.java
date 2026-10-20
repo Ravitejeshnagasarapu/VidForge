@@ -1,6 +1,9 @@
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Logger;
@@ -21,11 +24,12 @@ public class DownloadManager {
             cancellationToken.throwIfCancelled();
             Main.SSEBroadcaster.broadcast("DOWNLOAD_STARTED", "{\"downloadId\":\"" + downloadId + "\"}");
 
-            String cleanUrl = cleanYoutubeUrl(req.getUrl());
+            String cleanUrl = Main.cleanYoutubeUrl(req.getUrl());
             Main.YouTubeDownloader metaDownloader = new Main.YouTubeDownloader();
 
             cancellationToken.throwIfCancelled();
-            Map<String, String> info = getMetadata(cleanUrl, metaDownloader, cancellationToken);
+            Map<String, String> info = getMetadata(cleanUrl, metaDownloader, cancellationToken, session);
+            String cookiesBrowser = info.remove("_cookies_browser");
 
             String activeCodec = computeActiveCodec(req, info);
             info.put("activeCodec", activeCodec);
@@ -44,9 +48,18 @@ public class DownloadManager {
             });
 
             cancellationToken.throwIfCancelled();
-            Main.DownloadStatistics stats = downloadWithRetries(downloadId, req, info, session);
+            Main.DownloadStatistics stats = downloadWithRetries(downloadId, req, info, cookiesBrowser, session);
 
             cancellationToken.throwIfCancelled();
+            if (req.isBrowserFolderSelected()
+                    && (req.getOutputFolder() == null || req.getOutputFolder().trim().isEmpty())) {
+                Path completedFile = resolveCompletedFile(req, info, stats);
+                if (!DownloadSessionManager.getInstance().registerCompletedFile(downloadId, completedFile)) {
+                    throw new IOException("Completed download file could not be prepared for folder transfer: "
+                            + completedFile);
+                }
+                stats.lastKnownFilePath = completedFile.toString();
+            }
             Map<String, String> res = new HashMap<>();
             res.put("downloadId", downloadId);
             res.put("title", info.getOrDefault("title", "Unknown"));
@@ -59,34 +72,80 @@ public class DownloadManager {
 
         } catch (Exceptions.UserCancelledException e) {
             logger.info("Session " + downloadId + " cancelled by user.");
-            CleanupManager.cleanupPartialFiles();
             Main.SSEBroadcaster.broadcast("DOWNLOAD_FAILED",
                     "{\"downloadId\":\"" + downloadId + "\",\"message\":\"Download cancelled.\"}");
         } catch (Exception e) {
-            if (e instanceof InterruptedException || e.getMessage() != null && e.getMessage().contains("destroyed")) {
+            if (cancellationToken.isCancelled() || e instanceof InterruptedException
+                    || Thread.currentThread().isInterrupted()
+                    || e.getMessage() != null && e.getMessage().contains("destroyed")) {
                 logger.info("Session " + downloadId + " interrupted/destroyed.");
-                CleanupManager.cleanupPartialFiles();
                 Main.SSEBroadcaster.broadcast("DOWNLOAD_FAILED",
                         "{\"downloadId\":\"" + downloadId + "\",\"message\":\"Download cancelled.\"}");
             } else {
-                logger.severe("Session " + downloadId + " failed: " + e.getMessage());
+                String message = e.getMessage();
+                if (message == null || message.trim().isEmpty()) {
+                    message = e.getClass().getSimpleName();
+                }
+                logger.severe("Session " + downloadId + " failed: " + message);
+                Main.ConsoleRenderer.error("Download failed: " + message);
                 Main.SSEBroadcaster.broadcast("DOWNLOAD_FAILED",
                         "{\"downloadId\":\"" + downloadId + "\",\"message\":\""
-                                + Main.SSEBroadcaster.escapeJson(e.getMessage()) + "\"}");
+                                + Main.SSEBroadcaster.escapeJson(message) + "\"}");
             }
         } finally {
             DownloadSessionManager.getInstance().removeSession(downloadId);
+            if (cancellationToken.isCancelled()) {
+                CleanupManager.cleanupPartialFiles();
+            }
         }
     }
 
-    private Map<String, String> getMetadata(String url, Main.YouTubeDownloader downloader, CancellationToken token)
-            throws Exception {
+    private Map<String, String> getMetadata(String url, Main.YouTubeDownloader downloader, CancellationToken token,
+            DownloadSession session) throws Exception {
         token.throwIfCancelled();
-        return downloader.getMetadata(url);
+        return downloader.getMetadata(url, token, session);
+    }
+
+    private Path resolveCompletedFile(DownloadRequest req, Map<String, String> metadata,
+            Main.DownloadStatistics stats) throws IOException {
+        if (stats.lastKnownFilePath != null && !stats.lastKnownFilePath.trim().isEmpty()) {
+            Path reportedPath = Paths.get(stats.lastKnownFilePath);
+            Path resolvedPath = reportedPath.isAbsolute()
+                    ? reportedPath
+                    : Paths.get(stats.outputDir).resolve(reportedPath);
+            if (Files.isRegularFile(resolvedPath)) {
+                return resolvedPath.toRealPath();
+            }
+        }
+
+        String videoId = metadata.get("id");
+        if (videoId == null || videoId.isEmpty()) {
+            throw new IOException("The completed download path and video ID are unavailable.");
+        }
+
+        String mode = req.getMode().getValue();
+        String resolution = req.getResolution() != null ? req.getResolution().getValue() : null;
+        String resolutionSuffix = mode.equals("video") && resolution != null
+                ? ("best".equals(resolution) ? "_best" : "_" + resolution + "p")
+                : "";
+        String expectedBaseSuffix = "_" + videoId + resolutionSuffix;
+        Path outputDirectory = Paths.get(stats.outputDir);
+        try (java.util.stream.Stream<Path> files = Files.list(outputDirectory)) {
+            return files.filter(Files::isRegularFile)
+                    .filter(path -> {
+                        String fileName = path.getFileName().toString();
+                        int extensionSeparator = fileName.lastIndexOf('.');
+                        return extensionSeparator > 0
+                                && fileName.substring(0, extensionSeparator).endsWith(expectedBaseSuffix);
+                    })
+                    .max(Comparator.comparingLong(path -> path.toFile().lastModified()))
+                    .orElseThrow(() -> new IOException(
+                            "Could not locate the completed download in " + outputDirectory));
+        }
     }
 
     private Main.DownloadStatistics downloadWithRetries(String downloadId, DownloadRequest req,
-            Map<String, String> meta,
+            Map<String, String> meta, String cookiesBrowser,
             DownloadSession session) throws Exception {
         CancellationToken token = session.getCancellationToken();
         Main.DownloadStatistics stats = new Main.DownloadStatistics();
@@ -94,7 +153,7 @@ public class DownloadManager {
         Main.ProgressModel progressModel = new Main.ProgressModel();
         progressModel.activeCodec = computeActiveCodec(req, meta);
 
-        List<String> cmd = buildCommand(req, meta, stats);
+        List<String> cmd = buildCommand(req, meta, cookiesBrowser, stats);
 
         int attempt = 1;
         while (attempt <= Main.Config.MAX_RETRIES) {
@@ -110,6 +169,7 @@ public class DownloadManager {
                 session.setProcess(p);
 
                 AtomicReference<Exception> threadException = new AtomicReference<>();
+                AtomicReference<String> processErrorLine = new AtomicReference<>();
                 Thread readerThread = new Thread(() -> {
                     try (BufferedReader reader = new BufferedReader(
                             new InputStreamReader(p.getInputStream(), "UTF-8"))) {
@@ -117,6 +177,9 @@ public class DownloadManager {
                         while ((line = reader.readLine()) != null) {
                             if (token.isCancelled())
                                 break;
+                            if (line.toLowerCase(Locale.ROOT).contains("error")) {
+                                processErrorLine.set(line.trim());
+                            }
                             logger.info("yt-dlp: " + line);
                             Main.ProgressParser.parseLine(line, renderer, progressModel, stats);
                         }
@@ -138,9 +201,13 @@ public class DownloadManager {
                 }
 
                 if (exitCode == 0) {
+                    Main.ConsoleRenderer.success("Download completed: "
+                            + (stats.lastKnownFilePath != null ? stats.lastKnownFilePath : stats.title));
                     return stats;
                 } else {
-                    throw new IOException("yt-dlp exited with code " + exitCode);
+                    String detail = processErrorLine.get();
+                    throw new IOException("yt-dlp exited with code " + exitCode
+                            + (detail != null ? ": " + detail : ""));
                 }
             } catch (Exception e) {
                 renderer.complete();
@@ -174,15 +241,28 @@ public class DownloadManager {
         return stats;
     }
 
-    private List<String> buildCommand(DownloadRequest req, Map<String, String> meta, Main.DownloadStatistics stats) {
+    private List<String> buildCommand(DownloadRequest req, Map<String, String> meta, String cookiesBrowser,
+            Main.DownloadStatistics stats) throws IOException {
         String url = req.getUrl();
         String mode = req.getMode().getValue();
         String resolution = req.getResolution() != null ? req.getResolution().getValue() : null;
         String audioFmt = req.getAudioFormat() != null ? req.getAudioFormat().getValue() : null;
         List<String> cmd = new ArrayList<>();
         cmd.add("yt-dlp");
+        cmd.add("--progress");
         cmd.add("--newline");
+        cmd.add("--progress-delta");
+        cmd.add("0.5");
         cmd.add("--no-warnings");
+        cmd.add("--no-check-formats");
+        cmd.add("--socket-timeout");
+        cmd.add("20");
+        cmd.add("--retries");
+        cmd.add("5");
+        cmd.add("--fragment-retries");
+        cmd.add("5");
+        cmd.add("--extractor-retries");
+        cmd.add("3");
         cmd.add("--windows-filenames");
 
         stats.title = meta.getOrDefault("title", "Unknown");
@@ -214,7 +294,8 @@ public class DownloadManager {
 
         String outputDir = req.getOutputFolder() != null && !req.getOutputFolder().trim().isEmpty()
                 ? req.getOutputFolder().trim()
-                : (mode.equals("audio") ? Main.Config.AUDIO_PATH : Main.Config.VIDEO_PATH);
+                : Paths.get(Main.Config.USER_HOME, "Downloads").toString();
+        Files.createDirectories(Paths.get(outputDir));
         stats.outputDir = outputDir;
         String suffix = (mode.equals("video") && resolution != null)
                 ? (resolution.equals("best") ? "_best" : "_" + resolution + "p")
@@ -222,13 +303,13 @@ public class DownloadManager {
         cmd.add("-P");
         cmd.add(outputDir);
         cmd.add("-o");
-        cmd.add(outputDir + "/%(title)s_%(id)s" + suffix + ".%(ext)s");
+        cmd.add(Paths.get(outputDir, "%(title)s_%(id)s" + suffix + ".%(ext)s").toString());
+        cmd.add("--print");
+        cmd.add("after_move:" + Main.ProgressParser.FINAL_PATH_PREFIX + "%(filepath)s");
 
-        if (req.isEmbedMetadata())
-            cmd.add("--embed-metadata");
-        if (req.isEmbedThumbnail())
-            cmd.add("--embed-thumbnail");
-        if (req.isEmbedSubtitles() && mode.equals("video")) {
+        cmd.add("--embed-metadata");
+        cmd.add("--embed-thumbnail");
+        if (mode.equals("video")) {
             cmd.add("--write-subs");
             cmd.add("--embed-subs");
             cmd.add("--sub-langs");
@@ -239,24 +320,12 @@ public class DownloadManager {
 
         cmd.add("--concurrent-fragments");
         cmd.add(String.valueOf(Main.Config.CONCURRENT_FRAGMENTS));
-        if (req.getCookies() != null && !req.getCookies().trim().isEmpty()) {
+        if (cookiesBrowser != null) {
             cmd.add("--cookies-from-browser");
-            cmd.add(req.getCookies().trim());
+            cmd.add(cookiesBrowser);
         }
         cmd.add(url);
         return cmd;
-    }
-
-    private String cleanYoutubeUrl(String url) {
-        try {
-            if (!url.startsWith("http"))
-                url = "https://" + url;
-            if (url.contains("&"))
-                url = url.substring(0, url.indexOf("&"));
-            return url;
-        } catch (Exception e) {
-            return url;
-        }
     }
 
     public static String computeActiveCodec(DownloadRequest req, Map<String, String> meta) {

@@ -1,4 +1,6 @@
 import java.io.InputStream;
+import java.io.FilterInputStream;
+import java.io.IOException;
 import java.net.URL;
 import java.net.HttpURLConnection;
 import java.util.Arrays;
@@ -35,18 +37,36 @@ public class ThumbnailDownloader {
     }
 
     private InputStream tryDownload(String urlString) {
+        HttpURLConnection conn = null;
+        boolean handedOff = false;
         try {
             URL url = new java.net.URI(urlString).toURL();
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
             conn.setConnectTimeout(5000);
             conn.setReadTimeout(5000);
 
             if (conn.getResponseCode() == 200) {
-                return conn.getInputStream();
+                final HttpURLConnection connection = conn;
+                InputStream stream = new FilterInputStream(conn.getInputStream()) {
+                    @Override
+                    public void close() throws IOException {
+                        try {
+                            super.close();
+                        } finally {
+                            connection.disconnect();
+                        }
+                    }
+                };
+                handedOff = true;
+                return stream;
             }
         } catch (Exception e) {
 
+        } finally {
+            if (!handedOff && conn != null) {
+                conn.disconnect();
+            }
         }
         return null;
     }
