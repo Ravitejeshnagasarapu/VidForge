@@ -9,6 +9,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const toast = document.createElement("div");
     toast.className = "toast";
+    toast.setAttribute("role", type === "error" ? "alert" : "status");
 
     let iconName = "info";
     if (type === "success") iconName = "check-circle";
@@ -1418,6 +1419,8 @@ document.addEventListener("DOMContentLoaded", () => {
         .writeText(textToCopy)
         .then(() => {
           const originalContent = btn.innerHTML;
+          const originalAriaLabel = btn.getAttribute("aria-label");
+          btn.setAttribute("aria-label", "Copied to clipboard!");
           btn.innerHTML = `<i data-lucide="check" class="text-success" style="width:14px; height:14px; display:inline-block; vertical-align:middle;"></i> <span style="color:var(--success)">Copied!</span>`;
           if (typeof lucide !== "undefined") {
             lucide.createIcons();
@@ -1425,6 +1428,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
           setTimeout(() => {
             btn.innerHTML = originalContent;
+            if (originalAriaLabel) {
+              btn.setAttribute("aria-label", originalAriaLabel);
+            } else {
+              btn.removeAttribute("aria-label");
+            }
             if (typeof lucide !== "undefined") {
               lucide.createIcons();
             }
