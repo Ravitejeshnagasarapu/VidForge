@@ -195,6 +195,24 @@ document.addEventListener("DOMContentLoaded", () => {
   const navLinks = document.querySelectorAll(".nav-link");
   const visibleSections = new Set();
   const sectionRatios = new Map();
+  // BOLT OPTIMIZATION: Cache bounding top per section from IntersectionObserverEntry
+  // to avoid triggering forced synchronous layout reflows via getBoundingClientRect().
+  const sectionBoundingTops = new Map();
+
+  // BOLT OPTIMIZATION: Map section IDs directly to nav targets for O(1) lookups
+  const SECTION_TO_HREF = {
+    home: "#home",
+    preview: "#preview",
+    architecture: "#architecture",
+    "how-it-works": "#architecture",
+    repository: "#architecture",
+    download: "#download",
+  };
+
+  // Cache link href attributes to avoid repeated getAttribute calls
+  navLinks.forEach((link) => {
+    link._cachedHref = link.getAttribute("href");
+  });
 
   const spyObserverOptions = {
     root: null,
@@ -207,22 +225,11 @@ document.addEventListener("DOMContentLoaded", () => {
   function updateActiveNav(activeId) {
     if (!activeId || isNavigating) return;
 
-    let targetHref = "#home";
-    if (activeId === "home") {
-      targetHref = "#home";
-    } else if (activeId === "preview") {
-      targetHref = "#preview";
-    } else if (
-      ["architecture", "how-it-works", "repository"].includes(activeId)
-    ) {
-      targetHref = "#architecture";
-    } else if (["download"].includes(activeId)) {
-      targetHref = "#download";
-    }
+    const targetHref = SECTION_TO_HREF[activeId] || "#home";
 
     let changed = false;
     navLinks.forEach((link) => {
-      const isMatch = link.getAttribute("href") === targetHref;
+      const isMatch = (link._cachedHref || link.getAttribute("href")) === targetHref;
       if (isMatch) {
         if (!link.classList.contains("active")) {
           link.classList.add("active");
@@ -249,9 +256,12 @@ document.addEventListener("DOMContentLoaded", () => {
       if (entry.isIntersecting) {
         visibleSections.add(id);
         sectionRatios.set(id, entry.intersectionRatio);
+        // Store entry.boundingClientRect.top provided asynchronously by browser
+        sectionBoundingTops.set(id, entry.boundingClientRect.top);
       } else {
         visibleSections.delete(id);
         sectionRatios.delete(id);
+        sectionBoundingTops.delete(id);
       }
     });
 
@@ -259,11 +269,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (visibleSections.size > 0) {
       let maxScore = -Infinity;
       visibleSections.forEach((id) => {
-        const el = document.getElementById(id);
-        if (el) {
-          const rect = el.getBoundingClientRect();
-          const distanceScore = -Math.abs(rect.top - 110);
-
+        // BOLT OPTIMIZATION: Use pre-captured boundingClientRect.top from the entry
+        // instead of calling document.getElementById(id).getBoundingClientRect(),
+        // avoiding synchronous layout reflows during scroll.
+        const top = sectionBoundingTops.get(id);
+        if (top !== undefined) {
+          const distanceScore = -Math.abs(top - 110);
           const ratio = sectionRatios.get(id) || 0;
           const score = distanceScore + ratio * 1000;
 
