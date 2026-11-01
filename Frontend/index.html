@@ -2072,7 +2072,11 @@ public class Main {
           <div class="quick-install-box">
             <div class="box-header">
               <span class="badge">Install Command</span>
-              <button class="btn-copy-code" id="btnCopyInstallCmd">
+              <button
+                class="btn-copy-code"
+                id="btnCopyInstallCmd"
+                aria-label="Copy install command to clipboard"
+              >
                 <i data-lucide="copy"></i> Copy
               </button>
             </div>
@@ -2225,7 +2229,13 @@ java -cp bin Main</code></pre>
       </div>
     </footer>
 
-    <div id="toast-container" class="toast-container"></div>
+    <div
+      id="toast-container"
+      class="toast-container"
+      role="region"
+      aria-live="polite"
+      aria-label="Notifications"
+    ></div>
 
     <script>
       (function loadLucideWithFallback(sources) {
